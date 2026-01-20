@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="23506" systemVersion="24.5.0" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithCloudKit="false" userDefinedModelVersionIdentifier="">
+    <entity name="DailyDigest" representedClassName="DailyDigest" syncable="YES" codeGenerationType="class">
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="date" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isStarred" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="journalText" optional="YES" attributeType="String"/>
+        <attribute name="keywordsData" optional="YES" attributeType="Binary"/>
+        <attribute name="lastProcessedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="photosData" optional="YES" attributeType="Binary"/>
+        <attribute name="sentimentScore" optional="NO" attributeType="Double" defaultValueString="0.5" usesScalarValueType="YES"/>
+        <attribute name="userMood" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="MonthlyPack" representedClassName="MonthlyPack" syncable="YES" codeGenerationType="class">
+        <attribute name="aiSummaryText" optional="YES" attributeType="String"/>
+        <attribute name="generatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="month" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="pdfData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="selectedPhotosData" optional="YES" attributeType="Binary"/>
+        <attribute name="statsData" optional="YES" attributeType="Binary"/>
+        <attribute name="userEditedText" optional="YES" attributeType="String"/>
+        <attribute name="year" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+    </entity>
+    <entity name="YearlySummary" representedClassName="YearlySummary" syncable="YES" codeGenerationType="class">
+        <attribute name="aiSummaryText" optional="YES" attributeType="String"/>
+        <attribute name="generatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="pdfData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
+        <attribute name="selectedPhotosData" optional="YES" attributeType="Binary"/>
+        <attribute name="statsData" optional="YES" attributeType="Binary"/>
+        <attribute name="userEditedText" optional="YES" attributeType="String"/>
+        <attribute name="year" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+    </entity>
+    <elements>
+        <element name="DailyDigest" positionX="-63" positionY="-18" width="128" height="179"/>
+        <element name="MonthlyPack" positionX="-54" positionY="9" width="128" height="164"/>
+        <element name="YearlySummary" positionX="-36" positionY="27" width="128" height="149"/>
+    </elements>
+</model>
