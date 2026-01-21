@@ -26,13 +26,14 @@ struct MonthBookView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 MonthYearPickerView(
                     selectedYear: $selectedYear,
                     selectedMonth: $selectedMonth
                 )
-                .padding()
+                .padding(.horizontal)
+                .padding(.top, 8)
 
                 Divider()
 
@@ -48,6 +49,7 @@ struct MonthBookView: View {
                 }
             }
             .navigationTitle("Month Book")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 

@@ -22,10 +22,11 @@ struct YearBookView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 YearPickerView(selectedYear: $selectedYear)
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.top, 8)
 
                 Divider()
 
@@ -40,6 +41,7 @@ struct YearBookView: View {
                 }
             }
             .navigationTitle("Year Book")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 

@@ -19,10 +19,11 @@ struct JournalView: View {
     private var allDigests: FetchedResults<DailyDigest>
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 0) {
                 CalendarHeaderView(selectedDate: $selectedDate)
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.top, 8)
 
                 JournalCalendarView(
                     selectedDate: $selectedDate,
@@ -42,6 +43,7 @@ struct JournalView: View {
                 Spacer()
             }
             .navigationTitle("Journal")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { showingEntryEditor = true }) {

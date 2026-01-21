@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		59527C5A2F203400006DA692 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		59527C5A2F203400006DA692 /* Exceptions for "BookOfMyLife" folder in "BookOfMyLife" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -43,7 +43,7 @@
 		59527C2A2F203353006DA692 /* BookOfMyLife */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				59527C5A2F203400006DA692 /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				59527C5A2F203400006DA692 /* Exceptions for "BookOfMyLife" folder in "BookOfMyLife" target */,
 			);
 			path = BookOfMyLife;
 			sourceTree = "<group>";

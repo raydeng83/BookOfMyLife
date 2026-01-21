@@ -53,7 +53,7 @@ struct ProfileView: View {
     }
 
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
                     VStack(spacing: 8) {
@@ -105,6 +105,7 @@ struct ProfileView: View {
                 .padding(.bottom, 32)
             }
             .navigationTitle("Profile")
+            .navigationBarTitleDisplayMode(.inline)
         }
     }
 }
