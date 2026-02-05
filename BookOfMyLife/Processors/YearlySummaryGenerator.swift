@@ -23,23 +23,27 @@ class YearlySummaryGenerator {
         // Calculate yearly statistics
         let stats = calculateYearlyStats(from: monthlyPacks)
 
-        // Generate AI summary
-        let summary = generateSummary(from: monthlyPacks, stats: stats)
-
-        // Create or update yearly summary
-        let yearlySummary = fetchOrCreateSummary(year: year, context: context)
-        yearlySummary.year = Int32(year)
-        yearlySummary.statsData = stats.encoded()
-        yearlySummary.aiSummaryText = summary
-        yearlySummary.generatedAt = Date()
+        // Generate AI summary (try Foundation Models, fallback to template)
+        let (summary, method) = await generateSummary(from: monthlyPacks, stats: stats, year: year)
 
         // Select best photos for the year
         let selectedPhotos = selectBestPhotos(from: monthlyPacks, maxCount: 24)
-        yearlySummary.selectedPhotosData = selectedPhotos.encoded()
 
-        try? context.save()
+        // Update Core Data on the context's thread
+        return await context.perform {
+            // Create or update yearly summary
+            let yearlySummary = self.fetchOrCreateSummary(year: year, context: context)
+            yearlySummary.year = Int32(year)
+            yearlySummary.statsData = stats.encoded()
+            yearlySummary.aiSummaryText = summary
+            yearlySummary.generationMethod = method
+            yearlySummary.generatedAt = Date()
+            yearlySummary.selectedPhotosData = selectedPhotos.encoded()
 
-        return yearlySummary
+            try? context.save()
+
+            return yearlySummary
+        }
     }
 
     // MARK: - Statistics Calculation
@@ -105,7 +109,42 @@ class YearlySummaryGenerator {
 
     // MARK: - Summary Generation
 
-    private func generateSummary(from packs: [MonthlyPack], stats: YearlyStats) -> String {
+    private func generateSummary(from packs: [MonthlyPack], stats: YearlyStats, year: Int) async -> (summary: String, method: String) {
+        // Try Foundation Models first (iOS 26+)
+        if #available(iOS 26.0, *) {
+            let service = FoundationModelsService()
+
+            if await service.isAvailable() {
+                do {
+                    // Extract monthly summaries
+                    let monthlySummaries = extractMonthlySummaries(from: packs)
+
+                    // Call LLM service
+                    let output = try await service.generateYearlySummary(
+                        stats: stats,
+                        monthlySummaries: monthlySummaries,
+                        year: year
+                    )
+
+                    // Format structured output into final string
+                    let summary = formatYearlySummary(output)
+                    print("[Yearly Summary] Generated summary using Foundation Models")
+                    return (summary, "foundationModels")
+                } catch {
+                    // Log error, fall through to template
+                    print("[Yearly Summary] LLM generation failed: \(error). Using template fallback.")
+                }
+            } else {
+                print("[Yearly Summary] Foundation Models not available. Using template.")
+            }
+        }
+
+        // Fallback: Template-based (existing code)
+        let templateSummary = generateTemplateSummary(from: packs, stats: stats)
+        return (templateSummary, "template")
+    }
+
+    private func generateTemplateSummary(from packs: [MonthlyPack], stats: YearlyStats) -> String {
         var summary = ""
 
         // Opening
@@ -151,6 +190,34 @@ class YearlySummaryGenerator {
         }
 
         return summary
+    }
+
+    // MARK: - LLM Helper Methods
+
+    /// Extract monthly summaries from packs for LLM processing
+    private func extractMonthlySummaries(from packs: [MonthlyPack]) -> [String] {
+        return packs.compactMap { pack in
+            // Use user-edited text if available, otherwise AI text
+            return pack.userEditedText ?? pack.aiSummaryText
+        }.filter { !$0.isEmpty }
+    }
+
+    /// Format structured LLM output into final summary string
+    private func formatYearlySummary(_ output: YearlySummaryOutput) -> String {
+        var parts: [String] = []
+
+        parts.append(output.yearOverview)
+        parts.append("\n\n" + output.majorThemes)
+        parts.append("\n\n" + output.growthPatterns)
+        parts.append("\n\n" + output.significantMilestones)
+
+        if let challenges = output.challenges, !challenges.isEmpty {
+            parts.append("\n\n" + challenges)
+        }
+
+        parts.append("\n\n" + output.futureInsights)
+
+        return parts.joined()
     }
 
     // MARK: - Photo Selection

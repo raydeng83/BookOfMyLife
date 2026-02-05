@@ -12,6 +12,8 @@ struct EmptyMonthView: View {
     let month: Int
     let onGenerate: () -> Void
 
+    @State private var aiAvailable = false
+
     private var monthName: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMMM"
@@ -35,6 +37,16 @@ struct EmptyMonthView: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
+            if aiAvailable {
+                Label("AI-Powered Summaries Available", systemImage: "sparkles")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            } else {
+                Label("Template Summaries", systemImage: "doc.text")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Button(action: onGenerate) {
                 HStack {
                     Image(systemName: "sparkles")
@@ -48,5 +60,10 @@ struct EmptyMonthView: View {
             .padding(.top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            if #available(iOS 18.0, *) {
+                aiAvailable = await AppleIntelligenceChecker().isAvailable()
+            }
+        }
     }
 }

@@ -15,6 +15,7 @@
     <entity name="MonthlyPack" representedClassName="MonthlyPack" syncable="YES" codeGenerationType="class">
         <attribute name="aiSummaryText" optional="YES" attributeType="String"/>
         <attribute name="generatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="generationMethod" optional="YES" attributeType="String"/>
         <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="month" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="pdfData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
@@ -26,6 +27,7 @@
     <entity name="YearlySummary" representedClassName="YearlySummary" syncable="YES" codeGenerationType="class">
         <attribute name="aiSummaryText" optional="YES" attributeType="String"/>
         <attribute name="generatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="generationMethod" optional="YES" attributeType="String"/>
         <attribute name="id" optional="NO" attributeType="UUID" usesScalarValueType="NO"/>
         <attribute name="pdfData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
         <attribute name="selectedPhotosData" optional="YES" attributeType="Binary"/>

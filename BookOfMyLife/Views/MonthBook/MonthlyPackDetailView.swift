@@ -13,6 +13,8 @@ struct MonthlyPackDetailView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showingEditor = false
     @State private var showingPDFViewer = false
+    @State private var isRegenerating = false
+    @State private var showingRegenerateConfirmation = false
 
     private var stats: MonthlyStats? {
         guard let statsData = pack.statsData else { return nil }
@@ -30,8 +32,21 @@ struct MonthlyPackDetailView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("AI Summary")
-                        .font(.headline)
+                    HStack {
+                        Text("AI Summary")
+                            .font(.headline)
+
+                        Spacer()
+
+                        if let method = pack.generationMethod {
+                            Label(
+                                method == "foundationModels" ? "AI Generated" : "Template",
+                                systemImage: method == "foundationModels" ? "sparkles" : "doc.text"
+                            )
+                            .font(.caption)
+                            .foregroundColor(method == "foundationModels" ? .blue : .secondary)
+                        }
+                    }
 
                     if let summary = pack.userEditedText ?? pack.aiSummaryText {
                         Text(summary)
@@ -70,6 +85,25 @@ struct MonthlyPackDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.horizontal)
+
+                Button(action: { showingRegenerateConfirmation = true }) {
+                    HStack {
+                        if isRegenerating {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Regenerate Summary")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(isRegenerating ? Color.gray : Color.blue)
+                    .foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(isRegenerating)
+                .padding(.horizontal)
             }
             .padding(.vertical)
         }
@@ -77,6 +111,29 @@ struct MonthlyPackDetailView: View {
             MonthlyPackEditorView(pack: pack)
                 .environment(\.managedObjectContext, viewContext)
         }
+        .alert("Regenerate Summary?", isPresented: $showingRegenerateConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Regenerate", role: .destructive) {
+                Task {
+                    await regenerateSummary()
+                }
+            }
+        } message: {
+            Text("This will generate a new AI summary based on your journal entries. Any unsaved edits will be lost.")
+        }
+    }
+
+    @MainActor
+    private func regenerateSummary() async {
+        isRegenerating = true
+        defer { isRegenerating = false }
+
+        let generator = MonthlyPackGenerator()
+        _ = await generator.generateMonthlyPack(
+            year: Int(pack.year),
+            month: Int(pack.month),
+            context: viewContext
+        )
     }
 }
 

@@ -11,6 +11,8 @@ import CoreData
 struct YearBookView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    @State private var isGenerating = false
+    @State private var generationProgress = ""
 
     @FetchRequest(
         sortDescriptors: [NSSortDescriptor(keyPath: \YearlySummary.year, ascending: false)],
@@ -42,12 +44,50 @@ struct YearBookView: View {
             }
             .navigationTitle("Year Book")
             .navigationBarTitleDisplayMode(.inline)
+            .overlay {
+                if isGenerating {
+                    ZStack {
+                        Color.black.opacity(0.4)
+                            .ignoresSafeArea()
+
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+
+                            Text(generationProgress)
+                                .foregroundColor(.white)
+                                .font(.subheadline)
+                        }
+                        .padding(24)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
+                }
+            }
         }
     }
 
     private func generateYearlySummary() {
-        // Will be implemented with processor
-        print("Generating yearly summary for \(selectedYear)")
+        isGenerating = true
+        generationProgress = "Collecting monthly summaries..."
+
+        Task {
+            let generator = YearlySummaryGenerator()
+
+            await MainActor.run {
+                generationProgress = "Generating yearly reflection..."
+            }
+
+            await generator.generateYearlySummary(
+                year: selectedYear,
+                context: viewContext
+            )
+
+            await MainActor.run {
+                isGenerating = false
+            }
+        }
     }
 }
 

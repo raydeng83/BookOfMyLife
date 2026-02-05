@@ -23,24 +23,28 @@ class MonthlyPackGenerator {
         // Calculate statistics
         let stats = calculateMonthlyStats(from: digests)
 
-        // Generate AI summary
-        let summary = generateSummary(from: digests, stats: stats)
-
-        // Create or update monthly pack
-        let pack = fetchOrCreatePack(year: year, month: month, context: context)
-        pack.year = Int32(year)
-        pack.month = Int32(month)
-        pack.statsData = stats.encoded()
-        pack.aiSummaryText = summary
-        pack.generatedAt = Date()
+        // Generate AI summary (try Foundation Models, fallback to template)
+        let (summary, method) = await generateSummary(from: digests, stats: stats, month: month, year: year)
 
         // Select best photos for the month
         let selectedPhotos = selectBestPhotos(from: digests, maxCount: 12)
-        pack.selectedPhotosData = selectedPhotos.encoded()
 
-        try? context.save()
+        // Update Core Data on the context's thread
+        return await context.perform {
+            // Create or update monthly pack
+            let pack = self.fetchOrCreatePack(year: year, month: month, context: context)
+            pack.year = Int32(year)
+            pack.month = Int32(month)
+            pack.statsData = stats.encoded()
+            pack.aiSummaryText = summary
+            pack.generationMethod = method
+            pack.generatedAt = Date()
+            pack.selectedPhotosData = selectedPhotos.encoded()
 
-        return pack
+            try? context.save()
+
+            return pack
+        }
     }
 
     // MARK: - Statistics Calculation
@@ -143,7 +147,44 @@ class MonthlyPackGenerator {
 
     // MARK: - Summary Generation
 
-    private func generateSummary(from digests: [DailyDigest], stats: MonthlyStats) -> String {
+    private func generateSummary(from digests: [DailyDigest], stats: MonthlyStats, month: Int, year: Int) async -> (summary: String, method: String) {
+        // Try Foundation Models first (iOS 26+)
+        if #available(iOS 26.0, *) {
+            let service = FoundationModelsService()
+
+            if await service.isAvailable() {
+                do {
+                    // Extract sample journal entries
+                    let sampleEntries = extractSampleEntries(from: digests, maxCount: 5)
+
+                    // Call LLM service
+                    let output = try await service.generateMonthlySummary(
+                        stats: stats,
+                        sampleEntries: sampleEntries,
+                        milestoneKeywords: stats.milestoneKeywords,
+                        month: month,
+                        year: year
+                    )
+
+                    // Format structured output into final string
+                    let summary = formatMonthlySummary(output)
+                    print("[Monthly Pack] Generated summary using Foundation Models")
+                    return (summary, "foundationModels")
+                } catch {
+                    // Log error, fall through to template
+                    print("[Monthly Pack] LLM generation failed: \(error). Using template fallback.")
+                }
+            } else {
+                print("[Monthly Pack] Foundation Models not available. Using template.")
+            }
+        }
+
+        // Fallback: Template-based (existing code)
+        let templateSummary = generateTemplateSummary(stats: stats)
+        return (templateSummary, "template")
+    }
+
+    private func generateTemplateSummary(stats: MonthlyStats) -> String {
         var summary = ""
 
         // Opening
@@ -189,6 +230,60 @@ class MonthlyPackGenerator {
         }
 
         return summary
+    }
+
+    // MARK: - LLM Helper Methods
+
+    /// Extract representative journal text samples for LLM processing
+    private func extractSampleEntries(from digests: [DailyDigest], maxCount: Int) -> [String] {
+        var samples: [String] = []
+
+        // Priority 1: Starred days (full text up to 500 words)
+        let starred = digests.filter { $0.isStarred && $0.journalText != nil }
+        for digest in starred.prefix(1) {
+            if let text = digest.journalText {
+                let truncated = truncateText(text, maxWords: 500)
+                samples.append(truncated)
+            }
+        }
+
+        // Priority 2: Random sampling from remaining days (truncate to 100 words)
+        let remaining = digests.filter { !$0.isStarred && $0.journalText != nil }
+        let randomSamples = remaining.shuffled().prefix(maxCount - samples.count)
+        for digest in randomSamples {
+            if let text = digest.journalText {
+                let truncated = truncateText(text, maxWords: 100)
+                samples.append(truncated)
+            }
+        }
+
+        return samples
+    }
+
+    /// Truncate text to maximum word count
+    private func truncateText(_ text: String, maxWords: Int) -> String {
+        let words = text.split(separator: " ")
+        if words.count <= maxWords {
+            return text
+        }
+        return words.prefix(maxWords).joined(separator: " ") + "..."
+    }
+
+    /// Format structured LLM output into final summary string
+    private func formatMonthlySummary(_ output: MonthlySummaryOutput) -> String {
+        var parts: [String] = []
+
+        parts.append(output.opening)
+        parts.append(output.moodAnalysis)
+        parts.append(output.themeHighlights)
+
+        if let milestones = output.milestones, !milestones.isEmpty {
+            parts.append("\n" + milestones)
+        }
+
+        parts.append("\n" + output.closingReflection)
+
+        return parts.joined(separator: " ")
     }
 
     // MARK: - Photo Selection

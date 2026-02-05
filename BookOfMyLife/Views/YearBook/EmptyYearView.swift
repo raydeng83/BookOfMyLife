@@ -11,6 +11,8 @@ struct EmptyYearView: View {
     let year: Int
     let onGenerate: () -> Void
 
+    @State private var aiAvailable = false
+
     var body: some View {
         VStack(spacing: 20) {
             Image(systemName: "calendar.badge.plus")
@@ -25,6 +27,16 @@ struct EmptyYearView: View {
                 .font(.title)
                 .fontWeight(.bold)
 
+            if aiAvailable {
+                Label("AI-Powered Summaries Available", systemImage: "sparkles")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            } else {
+                Label("Template Summaries", systemImage: "doc.text")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
             Button(action: onGenerate) {
                 HStack {
                     Image(systemName: "sparkles")
@@ -38,5 +50,10 @@ struct EmptyYearView: View {
             .padding(.top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .task {
+            if #available(iOS 18.0, *) {
+                aiAvailable = await AppleIntelligenceChecker().isAvailable()
+            }
+        }
     }
 }

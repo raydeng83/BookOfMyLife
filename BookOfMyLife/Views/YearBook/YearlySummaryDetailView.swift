@@ -30,8 +30,21 @@ struct YearlySummaryDetailView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("AI Summary")
-                        .font(.headline)
+                    HStack {
+                        Text("AI Summary")
+                            .font(.headline)
+
+                        Spacer()
+
+                        if let method = summary.generationMethod {
+                            Label(
+                                method == "foundationModels" ? "AI Generated" : "Template",
+                                systemImage: method == "foundationModels" ? "sparkles" : "doc.text"
+                            )
+                            .font(.caption)
+                            .foregroundColor(method == "foundationModels" ? .blue : .secondary)
+                        }
+                    }
 
                     if let summaryText = summary.userEditedText ?? summary.aiSummaryText {
                         Text(summaryText)
