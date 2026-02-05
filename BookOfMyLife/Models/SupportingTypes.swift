@@ -91,6 +91,53 @@ enum Mood: String, Codable, CaseIterable {
     }
 }
 
+// MARK: - Daily Entry Context (for LLM summaries)
+
+/// Rich context for a single day's entry, used for generating personalized summaries
+struct DailyEntryContext: Codable {
+    var date: Date
+    var dayOfMonth: Int
+    var weekday: String
+    var journalText: String?
+    var mood: String?
+    var isStarred: Bool
+    var keywords: [String]
+    var photoDescriptions: [String]  // Captions and scene descriptions
+    var wordCount: Int
+
+    /// Format entry for LLM prompt
+    func formatted() -> String {
+        var parts: [String] = []
+
+        // Date header
+        let starMarker = isStarred ? " ⭐" : ""
+        parts.append("[\(weekday), Day \(dayOfMonth)\(starMarker)]")
+
+        // Mood
+        if let mood = mood {
+            parts.append("Mood: \(mood)")
+        }
+
+        // Journal text (truncated if needed)
+        if let text = journalText, !text.isEmpty {
+            let truncated = text.count > 300 ? String(text.prefix(300)) + "..." : text
+            parts.append("Entry: \"\(truncated)\"")
+        }
+
+        // Photo context
+        if !photoDescriptions.isEmpty {
+            parts.append("Photos: \(photoDescriptions.joined(separator: "; "))")
+        }
+
+        // Keywords
+        if !keywords.isEmpty {
+            parts.append("Keywords: \(keywords.prefix(5).joined(separator: ", "))")
+        }
+
+        return parts.joined(separator: "\n")
+    }
+}
+
 // MARK: - Monthly Statistics
 
 struct MonthlyStats: Codable {

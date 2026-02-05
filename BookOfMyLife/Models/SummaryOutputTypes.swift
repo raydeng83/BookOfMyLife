@@ -13,11 +13,9 @@ struct MonthlySummaryOutput: Codable {
     /// Opening statement about the month (1-2 sentences)
     var opening: String
 
-    /// Analysis of emotional journey and mood patterns
-    var moodAnalysis: String
-
-    /// Highlights of top 3-5 themes from the month
-    var themeHighlights: String
+    /// Chronological narrative of the month with vague time references
+    /// (e.g., "early on", "as the month progressed", "toward the end")
+    var journey: String
 
     /// Special moments and milestones (optional, only if starred days exist)
     var milestones: String?

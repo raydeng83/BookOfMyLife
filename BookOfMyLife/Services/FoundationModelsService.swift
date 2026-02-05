@@ -20,7 +20,7 @@ import FoundationModels
 class FoundationModelsService {
 
     private let checker = AppleIntelligenceChecker()
-    private let maxPromptLength = 10000 // Character limit estimate for prompt
+    private let maxPromptLength = 15000 // Character limit for prompt (Foundation Models supports larger context)
     private let maxRetries = 3
 
     // MARK: - Public API
@@ -46,24 +46,21 @@ class FoundationModelsService {
     /// Generate a monthly summary using Foundation Models
     /// - Parameters:
     ///   - stats: Monthly statistics
-    ///   - sampleEntries: Sample journal text entries
-    ///   - milestoneKeywords: Keywords from starred days
+    ///   - dailyEntries: Rich context for each day's journal entry
     ///   - month: Month number (1-12)
     ///   - year: Year
     /// - Returns: Structured monthly summary output
     /// - Throws: FoundationModelsError if generation fails
     func generateMonthlySummary(
         stats: MonthlyStats,
-        sampleEntries: [String],
-        milestoneKeywords: [String],
+        dailyEntries: [DailyEntryContext],
         month: Int,
         year: Int
     ) async throws -> MonthlySummaryOutput {
-        // Build prompt
+        // Build prompt with rich daily context
         let prompt = buildMonthlyPrompt(
             stats: stats,
-            sampleEntries: sampleEntries,
-            milestoneKeywords: milestoneKeywords,
+            dailyEntries: dailyEntries,
             month: month,
             year: year
         )
@@ -123,8 +120,7 @@ class FoundationModelsService {
 
     private func buildMonthlyPrompt(
         stats: MonthlyStats,
-        sampleEntries: [String],
-        milestoneKeywords: [String],
+        dailyEntries: [DailyEntryContext],
         month: Int,
         year: Int
     ) -> String {
@@ -137,58 +133,165 @@ class FoundationModelsService {
             .map { $0.key }
             .joined(separator: ", ")
 
-        // Extract dominant mood
-        let dominantMood = stats.moodBreakdown
-            .max { $0.value < $1.value }
-            .map { Mood(rawValue: $0.key)?.displayName ?? $0.key } ?? "Neutral"
+        // Group entries by week
+        let weeklyEntries = groupEntriesByWeek(dailyEntries, totalDays: stats.totalDays)
 
-        // Format sample entries
-        let samplesText = sampleEntries.isEmpty ? "No sample text available." :
-            sampleEntries.enumerated().map { index, text in
-                "Entry \(index + 1):\n\(text)"
-            }.joined(separator: "\n\n")
+        // Identify starred days with their context
+        let starredDays = dailyEntries.filter { $0.isStarred }
+        let starredDaysText = starredDays.isEmpty ? "None" :
+            starredDays.map { entry in
+                var desc = "Day \(entry.dayOfMonth) (\(entry.weekday))"
+                if let mood = entry.mood {
+                    desc += " - \(mood)"
+                }
+                if !entry.keywords.isEmpty {
+                    desc += ": \(entry.keywords.prefix(3).joined(separator: ", "))"
+                }
+                return desc
+            }.joined(separator: "; ")
 
-        // Format milestones
-        let milestonesText = milestoneKeywords.isEmpty ? "None" :
-            milestoneKeywords.joined(separator: ", ")
+        // Format weekly sections
+        let weeklyContent = formatWeeklyContent(weeklyEntries)
 
         return """
         You are a personal journaling assistant creating a monthly reflection for \(monthName) \(year).
 
-        STATISTICS:
+        CRITICAL RULES:
+        - NEVER make up, invent, or fabricate any events, feelings, or details
+        - ONLY reference information that appears in the entries below
+        - Skip over periods with no entries - do not mention them
+        - Combine adjacent periods if they share similar themes or if gaps exist between them
+
+        MONTHLY OVERVIEW:
         - Days journaled: \(stats.daysWithEntries) out of \(stats.totalDays)
         - Total photos: \(stats.totalPhotos)
-        - Total words: \(stats.totalWords)
-        - Longest streak: \(stats.longestStreak) days
-        - Starred days: \(stats.starredDaysCount)
-        - Overall mood: \(dominantMood)
+        - Total words written: \(stats.totalWords)
+        - Longest streak: \(stats.longestStreak) consecutive days
+        - Special starred days: \(stats.starredDaysCount)
         - Top themes: \(topThemes.isEmpty ? "None identified" : topThemes)
 
-        SAMPLE JOURNAL EXCERPTS:
-        \(samplesText)
+        STARRED MOMENTS:
+        \(starredDaysText)
 
-        SPECIAL MOMENTS:
-        \(milestonesText)
+        \(weeklyContent)
 
-        Create a warm, personal monthly reflection with these sections:
+        Create a warm, personal monthly reflection as a flowing narrative. Use VAGUE time references like:
+        - "The month started with...", "Early on...", "In the beginning..."
+        - "As the days went by...", "Around the middle of the month...", "Things shifted when..."
+        - "Later in the month...", "Toward the end...", "As the month wound down..."
 
-        1. OPENING (1-2 sentences): Comment on the month's documentation and overall tone
-        2. MOOD ANALYSIS (2-3 sentences): Reflect on the emotional journey
-        3. THEME HIGHLIGHTS (2-3 sentences): Discuss the top 2-3 themes with specific context
-        4. MILESTONES (1-2 sentences, optional): Acknowledge special moments if any starred days exist
-        5. CLOSING REFLECTION (1-2 sentences): Forward-looking note or insight
+        Do NOT use specific week numbers or date ranges. Let the narrative flow naturally, skipping periods without entries.
 
-        Write in second person ("you"), as if speaking to your future self. Be specific and use themes/keywords from the data. Keep total length to 150-200 words.
+        Structure your response as follows:
+        1. OPENING (1-2 sentences): Set the overall tone based on what was recorded
+        2. JOURNEY (4-8 sentences): A flowing chronological narrative using vague time references. Only describe what actually happened based on the entries. Skip or combine periods with no entries.
+        3. MILESTONES (1-2 sentences): Only include if starred days exist with actual content
+        4. CLOSING REFLECTION (1-2 sentences): Reflect on what was actually documented
 
-        Respond with a JSON object matching this structure:
+        Write in second person ("you"), speaking to your future self. Be factual and grounded in the actual entries provided.
+
+        Respond with a JSON object:
         {
           "opening": "...",
-          "moodAnalysis": "...",
-          "themeHighlights": "...",
+          "journey": "...",
           "milestones": "..." or null,
           "closingReflection": "..."
         }
         """
+    }
+
+    /// Group entries into weeks (1-7, 8-14, 15-21, 22-28, 29+)
+    private func groupEntriesByWeek(_ entries: [DailyEntryContext], totalDays: Int) -> [[DailyEntryContext]] {
+        var weeks: [[DailyEntryContext]] = [[], [], [], [], []]
+
+        for entry in entries {
+            let day = entry.dayOfMonth
+            let weekIndex: Int
+            switch day {
+            case 1...7: weekIndex = 0
+            case 8...14: weekIndex = 1
+            case 15...21: weekIndex = 2
+            case 22...28: weekIndex = 3
+            default: weekIndex = 4
+            }
+            weeks[weekIndex].append(entry)
+        }
+
+        return weeks
+    }
+
+    /// Format weekly content for the prompt
+    private func formatWeeklyContent(_ weeklyEntries: [[DailyEntryContext]]) -> String {
+        var sections: [String] = []
+
+        let weekRanges = ["Days 1-7", "Days 8-14", "Days 15-21", "Days 22-28", "Days 29-31"]
+
+        for (index, entries) in weeklyEntries.enumerated() {
+            let weekNum = index + 1
+            let range = weekRanges[index]
+
+            if entries.isEmpty {
+                sections.append("--- WEEK \(weekNum) (\(range)) ---\n[NO ENTRIES - Do not make up content for this week]")
+                continue
+            }
+
+            // Sort entries by date within the week
+            let sorted = entries.sorted { $0.date < $1.date }
+
+            // Calculate week stats
+            let moods = sorted.compactMap { $0.mood }
+            let moodSummary = moods.isEmpty ? "No mood data" :
+                Dictionary(grouping: moods) { $0 }
+                    .mapValues { $0.count }
+                    .sorted { $0.value > $1.value }
+                    .prefix(2)
+                    .map { "\($0.key): \($0.value)" }
+                    .joined(separator: ", ")
+
+            let starredCount = sorted.filter { $0.isStarred }.count
+            let photoCount = sorted.reduce(0) { $0 + $1.photoDescriptions.count }
+
+            var weekSection = "--- WEEK \(weekNum) (\(range)) ---\n"
+            weekSection += "Entries: \(entries.count) | Moods: \(moodSummary)"
+            if starredCount > 0 {
+                weekSection += " | ⭐ Starred: \(starredCount)"
+            }
+            if photoCount > 0 {
+                weekSection += " | Photos: \(photoCount)"
+            }
+            weekSection += "\n\n"
+
+            // Format individual entries (limit to 4 per week to manage prompt size)
+            let selectedEntries = selectBestEntries(from: sorted, maxCount: 4)
+            weekSection += selectedEntries.map { $0.formatted() }.joined(separator: "\n\n")
+
+            sections.append(weekSection)
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
+    /// Select the most content-rich entries from a set
+    private func selectBestEntries(from entries: [DailyEntryContext], maxCount: Int) -> [DailyEntryContext] {
+        // Score entries by content richness
+        let scored = entries.map { entry -> (DailyEntryContext, Int) in
+            var score = 0
+            if entry.isStarred { score += 10 }
+            if entry.journalText != nil { score += 5 }
+            if entry.mood != nil { score += 2 }
+            score += min(entry.keywords.count, 3)
+            score += min(entry.photoDescriptions.count * 2, 4)
+            return (entry, score)
+        }
+
+        // Sort by score (descending), then select top entries
+        let selected = scored
+            .sorted { $0.1 > $1.1 }
+            .prefix(maxCount)
+            .map { $0.0 }
+
+        // Re-sort by date for chronological presentation
+        return selected.sorted { $0.date < $1.date }
     }
 
     private func buildYearlyPrompt(
@@ -292,14 +395,11 @@ class FoundationModelsService {
 
         #if canImport(FoundationModels)
         do {
-            // Call Foundation Models API
-            // Note: The actual API usage will depend on Apple's final implementation
-            // This is a placeholder based on expected API design
-            let model = FoundationModel.default
+            // Use Apple's Foundation Models API (iOS 26.0+)
+            let session = LanguageModelSession()
+            let response = try await session.respond(to: prompt)
 
-            let response = try await model.generate(prompt: prompt)
-
-            return response
+            return response.content
         } catch {
             // Wrap error for better handling
             throw FoundationModelsError.generationFailed(error.localizedDescription)

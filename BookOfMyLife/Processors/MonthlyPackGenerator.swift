@@ -154,14 +154,13 @@ class MonthlyPackGenerator {
 
             if await service.isAvailable() {
                 do {
-                    // Extract sample journal entries
-                    let sampleEntries = extractSampleEntries(from: digests, maxCount: 5)
+                    // Extract rich daily entry context for each day
+                    let dailyEntries = extractDailyEntryContexts(from: digests)
 
-                    // Call LLM service
+                    // Call LLM service with rich context
                     let output = try await service.generateMonthlySummary(
                         stats: stats,
-                        sampleEntries: sampleEntries,
-                        milestoneKeywords: stats.milestoneKeywords,
+                        dailyEntries: dailyEntries,
                         month: month,
                         year: year
                     )
@@ -234,56 +233,78 @@ class MonthlyPackGenerator {
 
     // MARK: - LLM Helper Methods
 
-    /// Extract representative journal text samples for LLM processing
-    private func extractSampleEntries(from digests: [DailyDigest], maxCount: Int) -> [String] {
-        var samples: [String] = []
+    /// Extract rich context for all daily entries to pass to LLM
+    private func extractDailyEntryContexts(from digests: [DailyDigest]) -> [DailyEntryContext] {
+        let calendar = Calendar.current
+        let weekdayFormatter = DateFormatter()
+        weekdayFormatter.dateFormat = "EEEE"  // Full weekday name
 
-        // Priority 1: Starred days (full text up to 500 words)
-        let starred = digests.filter { $0.isStarred && $0.journalText != nil }
-        for digest in starred.prefix(1) {
-            if let text = digest.journalText {
-                let truncated = truncateText(text, maxWords: 500)
-                samples.append(truncated)
+        return digests.compactMap { digest -> DailyEntryContext? in
+            guard let date = digest.date else { return nil }
+
+            let dayOfMonth = calendar.component(.day, from: date)
+            let weekday = weekdayFormatter.string(from: date)
+
+            // Extract keywords
+            let keywords: [String]
+            if let keywordsData = digest.keywordsData {
+                keywords = [String].decoded(from: keywordsData)
+            } else {
+                keywords = []
             }
-        }
 
-        // Priority 2: Random sampling from remaining days (truncate to 100 words)
-        let remaining = digests.filter { !$0.isStarred && $0.journalText != nil }
-        let randomSamples = remaining.shuffled().prefix(maxCount - samples.count)
-        for digest in randomSamples {
-            if let text = digest.journalText {
-                let truncated = truncateText(text, maxWords: 100)
-                samples.append(truncated)
+            // Extract photo descriptions (captions + detected scenes)
+            var photoDescriptions: [String] = []
+            if let photosData = digest.photosData {
+                let photos = [PhotoInfo].decoded(from: photosData)
+                for photo in photos {
+                    if let caption = photo.caption, !caption.isEmpty {
+                        photoDescriptions.append(caption)
+                    } else if !photo.detectedScenes.isEmpty {
+                        photoDescriptions.append(photo.detectedScenes.prefix(3).joined(separator: ", "))
+                    }
+                }
             }
-        }
 
-        return samples
-    }
+            // Calculate word count
+            let wordCount = digest.journalText.map { nlpAnalyzer.countWords($0) } ?? 0
 
-    /// Truncate text to maximum word count
-    private func truncateText(_ text: String, maxWords: Int) -> String {
-        let words = text.split(separator: " ")
-        if words.count <= maxWords {
-            return text
-        }
-        return words.prefix(maxWords).joined(separator: " ") + "..."
+            // Get mood display name
+            let moodName = digest.userMood.flatMap { Mood(rawValue: $0)?.displayName }
+
+            return DailyEntryContext(
+                date: date,
+                dayOfMonth: dayOfMonth,
+                weekday: weekday,
+                journalText: digest.journalText,
+                mood: moodName,
+                isStarred: digest.isStarred,
+                keywords: keywords,
+                photoDescriptions: photoDescriptions,
+                wordCount: wordCount
+            )
+        }.sorted { $0.date < $1.date }  // Sort chronologically
     }
 
     /// Format structured LLM output into final summary string
     private func formatMonthlySummary(_ output: MonthlySummaryOutput) -> String {
         var parts: [String] = []
 
+        // Opening
         parts.append(output.opening)
-        parts.append(output.moodAnalysis)
-        parts.append(output.themeHighlights)
 
+        // Journey narrative
+        parts.append("\n\n" + output.journey)
+
+        // Milestones
         if let milestones = output.milestones, !milestones.isEmpty {
-            parts.append("\n" + milestones)
+            parts.append("\n\n" + milestones)
         }
 
-        parts.append("\n" + output.closingReflection)
+        // Closing
+        parts.append("\n\n" + output.closingReflection)
 
-        return parts.joined(separator: " ")
+        return parts.joined(separator: "")
     }
 
     // MARK: - Photo Selection
