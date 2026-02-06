@@ -13,6 +13,10 @@ struct YearlySummaryDetailView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showingEditor = false
     @State private var showingPDFViewer = false
+    @State private var isRegenerating = false
+    @State private var showingRegenerateConfirmation = false
+    @State private var showingDeleteConfirmation = false
+    var onDelete: (() -> Void)?
 
     private var stats: YearlyStats? {
         guard let statsData = summary.statsData else { return nil }
@@ -83,12 +87,86 @@ struct YearlySummaryDetailView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.horizontal)
+
+                Button(action: { showingRegenerateConfirmation = true }) {
+                    HStack {
+                        if isRegenerating {
+                            ProgressView()
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Regenerate Summary")
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(isRegenerating ? Color.gray : Color.blue)
+                    .foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .disabled(isRegenerating)
+                .padding(.horizontal)
+
+                Button(action: { showingDeleteConfirmation = true }) {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("Delete Year Book")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .foregroundColor(.red)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
             }
             .padding(.vertical)
+            .padding(.bottom, 100) // Extra space for bottom tab bar
         }
         .sheet(isPresented: $showingEditor) {
             YearlySummaryEditorView(summary: summary)
                 .environment(\.managedObjectContext, viewContext)
+        }
+        .alert("Regenerate Summary?", isPresented: $showingRegenerateConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Regenerate", role: .destructive) {
+                Task {
+                    await regenerateSummary()
+                }
+            }
+        } message: {
+            Text("This will generate a new AI summary based on your monthly summaries. Any unsaved edits will be lost.")
+        }
+        .alert("Delete Year Book?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteYearBook()
+            }
+        } message: {
+            Text("This will permanently delete this year book and its summary. Your monthly summaries and daily entries will not be affected.")
+        }
+    }
+
+    @MainActor
+    private func regenerateSummary() async {
+        isRegenerating = true
+        defer { isRegenerating = false }
+
+        let generator = YearlySummaryGenerator()
+        _ = await generator.generateYearlySummary(
+            year: Int(summary.year),
+            context: viewContext
+        )
+    }
+
+    private func deleteYearBook() {
+        viewContext.delete(summary)
+
+        do {
+            try viewContext.save()
+            onDelete?()
+        } catch {
+            print("Error deleting year book: \(error)")
         }
     }
 }
