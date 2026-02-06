@@ -106,6 +106,7 @@ struct MonthlyPackDetailView: View {
                 .padding(.horizontal)
             }
             .padding(.vertical)
+            .padding(.bottom, 100) // Extra space for bottom tab bar
         }
         .sheet(isPresented: $showingEditor) {
             MonthlyPackEditorView(pack: pack)
