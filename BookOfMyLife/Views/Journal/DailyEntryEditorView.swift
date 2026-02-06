@@ -31,16 +31,17 @@ struct DailyEntryEditorView: View {
                 }
 
                 Section("Mood") {
-                    Picker("Mood", selection: $selectedMood) {
+                    HStack(spacing: 12) {
                         ForEach(Mood.allCases, id: \.self) { mood in
-                            HStack {
-                                Text(mood.emoji)
-                                Text(mood.displayName)
-                            }
-                            .tag(mood)
+                            MoodButton(
+                                mood: mood,
+                                isSelected: selectedMood == mood,
+                                action: { selectedMood = mood }
+                            )
                         }
                     }
-                    .pickerStyle(.segmented)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
                 }
 
                 Section("Photos (up to 4)") {
@@ -172,5 +173,35 @@ struct DailyEntryEditorView: View {
             print("Error saving digest: \(error)")
             isSaving = false
         }
+    }
+}
+
+struct MoodButton: View {
+    let mood: Mood
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(mood.emoji)
+                    .font(.system(size: 28))
+                Text(mood.displayName)
+                    .font(.caption2)
+                    .fontWeight(isSelected ? .semibold : .regular)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.accentColor : Color.clear, lineWidth: 2)
+            )
+        }
+        .buttonStyle(.plain)
+        .foregroundColor(isSelected ? .accentColor : .primary)
     }
 }

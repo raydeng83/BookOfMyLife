@@ -57,6 +57,8 @@ struct ContentView: View {
             TabBarButton(title: "Me", icon: "person.fill", tag: 3, selectedTab: $selectedTab)
         }
         .frame(height: 49)
+        .padding(.top, 12)
+        .padding(.bottom, 24)
         .background(.ultraThinMaterial)
     }
 
