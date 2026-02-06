@@ -15,6 +15,8 @@ struct MonthlyPackDetailView: View {
     @State private var showingPDFViewer = false
     @State private var isRegenerating = false
     @State private var showingRegenerateConfirmation = false
+    @State private var showingDeleteConfirmation = false
+    var onDelete: (() -> Void)?
 
     private var stats: MonthlyStats? {
         guard let statsData = pack.statsData else { return nil }
@@ -104,6 +106,19 @@ struct MonthlyPackDetailView: View {
                 }
                 .disabled(isRegenerating)
                 .padding(.horizontal)
+
+                Button(action: { showingDeleteConfirmation = true }) {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("Delete Month Book")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.red.opacity(0.1))
+                    .foregroundColor(.red)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
             }
             .padding(.vertical)
             .padding(.bottom, 100) // Extra space for bottom tab bar
@@ -121,6 +136,25 @@ struct MonthlyPackDetailView: View {
             }
         } message: {
             Text("This will generate a new AI summary based on your journal entries. Any unsaved edits will be lost.")
+        }
+        .alert("Delete Month Book?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteMonthBook()
+            }
+        } message: {
+            Text("This will permanently delete this month book and its summary. Your daily journal entries will not be affected.")
+        }
+    }
+
+    private func deleteMonthBook() {
+        viewContext.delete(pack)
+
+        do {
+            try viewContext.save()
+            onDelete?()
+        } catch {
+            print("Error deleting month book: \(error)")
         }
     }
 

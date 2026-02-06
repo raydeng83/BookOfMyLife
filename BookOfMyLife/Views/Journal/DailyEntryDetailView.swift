@@ -11,9 +11,12 @@ import CoreData
 struct DailyEntryDetailView: View {
     @ObservedObject var digest: DailyDigest
     @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.dismiss) private var dismiss
     @State private var showingEditor = false
     @State private var showingPhotoViewer = false
     @State private var selectedPhotoIndex: Int = 0
+    @State private var showingDeleteConfirmation = false
+    var onDelete: (() -> Void)?
 
     private var photos: [PhotoInfo] {
         guard let photosData = digest.photosData else { return [] }
@@ -45,6 +48,11 @@ struct DailyEntryDetailView: View {
 
                     Button("Edit") {
                         showingEditor = true
+                    }
+
+                    Button(action: { showingDeleteConfirmation = true }) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red)
                     }
                 }
                 .padding(.horizontal)
@@ -107,6 +115,32 @@ struct DailyEntryDetailView: View {
         }
         .fullScreenCover(isPresented: $showingPhotoViewer) {
             PhotoViewerView(photos: photos, initialIndex: selectedPhotoIndex)
+        }
+        .alert("Delete Entry?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteEntry()
+            }
+        } message: {
+            Text("This will permanently delete this journal entry and all its photos. This action cannot be undone.")
+        }
+    }
+
+    private func deleteEntry() {
+        // Delete associated photos from file system
+        for photo in photos {
+            try? FileManager.default.removeItem(at: photo.fileURL)
+        }
+
+        // Delete the digest from Core Data
+        viewContext.delete(digest)
+
+        do {
+            try viewContext.save()
+            onDelete?()
+            dismiss()
+        } catch {
+            print("Error deleting entry: \(error)")
         }
     }
 }
