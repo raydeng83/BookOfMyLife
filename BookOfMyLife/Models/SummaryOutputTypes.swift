@@ -45,3 +45,20 @@ struct YearlySummaryOutput: Codable {
     /// Insights and reflections for the future
     var futureInsights: String
 }
+
+/// AI-extracted topic from journal entries
+struct ExtractedTopic: Codable {
+    /// Short, meaningful topic name (e.g., "Family Gathering", "Beach Trip")
+    var name: String
+
+    /// Day numbers related to this topic
+    var days: [Int]
+
+    /// Brief description for magazine layout
+    var description: String
+}
+
+/// Wrapper for topics array (in case LLM wraps it)
+struct TopicsWrapper: Codable {
+    var topics: [ExtractedTopic]
+}

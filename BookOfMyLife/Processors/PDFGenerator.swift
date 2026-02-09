@@ -223,39 +223,45 @@ class PDFGenerator {
         drawLine(at: currentY, width: contentWidth)
         currentY += 25
 
-        // Distribute photos to paragraphs
-        let photoAssignments = distributePhotos(paragraphs: paragraphs, photos: themePhotos)
-
-        // Draw paragraphs with embedded photos
-        for (index, paragraph) in paragraphs.enumerated() {
-            if let photoIndex = photoAssignments[index], photoIndex < themePhotos.count {
-                // Draw paragraph with photo beside it
-                let rowHeight = estimatePhotoTextRowHeight(paragraph, width: contentWidth)
-
-                if currentY + rowHeight > pageRect.height - margin - 50 {
-                    context.beginPage()
-                    currentY = margin
-                }
-
-                let isPhotoLeft = index % 2 == 0
-                currentY = drawPhotoTextRow(
-                    themePhotos[photoIndex].photo,
-                    text: paragraph,
-                    at: currentY,
-                    width: contentWidth,
-                    isPhotoLeft: isPhotoLeft
-                )
-                currentY += 20
-            } else {
-                // Draw paragraph only
-                let estimatedHeight = estimateTextHeight(paragraph, width: contentWidth)
-                if currentY + estimatedHeight > pageRect.height - margin - 50 {
-                    context.beginPage()
-                    currentY = margin
-                }
-                currentY = drawParagraph(paragraph, at: currentY, width: contentWidth)
-                currentY += 15
+        // Draw opening paragraph
+        if let firstParagraph = paragraphs.first {
+            let estimatedHeight = estimateTextHeight(firstParagraph, width: contentWidth)
+            if currentY + estimatedHeight > pageRect.height - margin - 50 {
+                context.beginPage()
+                currentY = margin
             }
+            currentY = drawParagraph(firstParagraph, at: currentY, width: contentWidth)
+            currentY += 20
+        }
+
+        // Draw topic photos with descriptions
+        for (index, themePhoto) in themePhotos.enumerated() {
+            let rowHeight = estimateTopicRowHeight(themePhoto, width: contentWidth)
+
+            if currentY + rowHeight > pageRect.height - margin - 50 {
+                context.beginPage()
+                currentY = margin
+            }
+
+            let isPhotoLeft = index % 2 == 0
+            currentY = drawTopicPhotoRow(
+                themePhoto,
+                at: currentY,
+                width: contentWidth,
+                isPhotoLeft: isPhotoLeft
+            )
+            currentY += 20
+        }
+
+        // Draw remaining paragraphs
+        for paragraph in paragraphs.dropFirst() {
+            let estimatedHeight = estimateTextHeight(paragraph, width: contentWidth)
+            if currentY + estimatedHeight > pageRect.height - margin - 50 {
+                context.beginPage()
+                currentY = margin
+            }
+            currentY = drawParagraph(paragraph, at: currentY, width: contentWidth)
+            currentY += 15
         }
 
         // Draw stats at the end
@@ -273,38 +279,10 @@ class PDFGenerator {
         }
     }
 
-    /// Match photos to paragraphs based on keyword matching (only matched photos shown)
-    private func distributePhotos(paragraphs: [String], photos: [ThemePhoto]) -> [Int: Int] {
-        var result: [Int: Int] = [:]
-        var usedPhotos: Set<Int> = []
-
-        // Only match photos to paragraphs by theme/keyword - no forced distribution
-        for (pIndex, paragraph) in paragraphs.enumerated() {
-            let paragraphLower = paragraph.lowercased()
-
-            for (phIndex, themePhoto) in photos.enumerated() {
-                guard !usedPhotos.contains(phIndex) else { continue }
-
-                let themeLower = themePhoto.theme.lowercased()
-                let keywordsMatch = themePhoto.dayKeywords.contains { keyword in
-                    // Only match keywords with 4+ characters to avoid false positives
-                    keyword.count >= 4 && paragraphLower.contains(keyword.lowercased())
-                }
-
-                if paragraphLower.contains(themeLower) || keywordsMatch {
-                    result[pIndex] = phIndex
-                    usedPhotos.insert(phIndex)
-                    break
-                }
-            }
-        }
-
-        return result
-    }
-
-    private func drawPhotoTextRow(_ photo: PhotoInfo, text: String, at y: CGFloat, width: CGFloat, isPhotoLeft: Bool) -> CGFloat {
-        let photoWidth: CGFloat = 120
-        let photoHeight: CGFloat = 150
+    /// Draw a topic photo row with title and description
+    private func drawTopicPhotoRow(_ themePhoto: ThemePhoto, at y: CGFloat, width: CGFloat, isPhotoLeft: Bool) -> CGFloat {
+        let photoWidth: CGFloat = 130
+        let photoHeight: CGFloat = 160
         let spacing: CGFloat = 15
         let textWidth = width - photoWidth - spacing
 
@@ -320,7 +298,7 @@ class PDFGenerator {
         }
 
         // Draw photo
-        if let image = photo.loadImage() {
+        if let image = themePhoto.photo.loadImage() {
             let photoRect = CGRect(x: photoX, y: y, width: photoWidth, height: photoHeight)
 
             UIGraphicsGetCurrentContext()?.saveGState()
@@ -329,34 +307,42 @@ class PDFGenerator {
             image.draw(in: photoRect)
             UIGraphicsGetCurrentContext()?.restoreGState()
 
-            // Light border
             UIColor.lightGray.withAlphaComponent(0.3).setStroke()
             clipPath.lineWidth = 0.5
             clipPath.stroke()
         }
 
-        // Draw text beside photo
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 5
-        paragraphStyle.alignment = .justified
+        var textY = y
 
-        let textAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 12),
-            .foregroundColor: UIColor.darkGray,
-            .paragraphStyle: paragraphStyle
+        // Draw topic title
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
+            .foregroundColor: UIColor.black
         ]
+        let titleRect = CGRect(x: textX, y: textY, width: textWidth, height: 22)
+        themePhoto.theme.draw(in: titleRect, withAttributes: titleAttributes)
+        textY += 26
 
-        let textRect = CGRect(x: textX, y: y, width: textWidth, height: photoHeight + 50)
-        text.draw(in: textRect, withAttributes: textAttributes)
+        // Draw description
+        if let description = themePhoto.description, !description.isEmpty {
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.lineSpacing = 4
 
-        return y + max(photoHeight, estimateTextHeight(text, width: textWidth)) + 10
+            let descAttributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 12),
+                .foregroundColor: UIColor.darkGray,
+                .paragraphStyle: paragraphStyle
+            ]
+
+            let descRect = CGRect(x: textX, y: textY, width: textWidth, height: photoHeight - 30)
+            description.draw(in: descRect, withAttributes: descAttributes)
+        }
+
+        return y + photoHeight + 10
     }
 
-    private func estimatePhotoTextRowHeight(_ text: String, width: CGFloat) -> CGFloat {
-        let photoHeight: CGFloat = 150
-        let textWidth = width - 120 - 15
-        let textHeight = estimateTextHeight(text, width: textWidth)
-        return max(photoHeight, textHeight) + 20
+    private func estimateTopicRowHeight(_ themePhoto: ThemePhoto, width: CGFloat) -> CGFloat {
+        return 170 // Fixed height for topic rows
     }
 
     // MARK: - Drawing Helpers

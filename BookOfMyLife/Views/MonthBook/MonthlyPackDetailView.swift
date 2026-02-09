@@ -203,58 +203,32 @@ struct MonthlyPackDetailView: View {
     @ViewBuilder
     private var magazineContent: some View {
         let paragraphs = summaryParagraphs
-        let photoQueue = distributePhotos(paragraphs: paragraphs, photos: themePhotos)
 
-        ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-            // Check if this paragraph has an associated photo
-            if let photoIndex = photoQueue[index] {
-                // Photo beside text layout
-                MagazinePhotoTextRow(
-                    text: paragraph,
-                    photo: themePhotos[photoIndex].photo,
-                    isPhotoLeft: index % 2 == 0,
-                    onPhotoTap: {
-                        selectedPhotoIndex = photoIndex
-                        showingPhotoViewer = true
-                    }
-                )
-            } else {
-                // Text only
-                Text(paragraph)
-                    .lineSpacing(4)
-                    .padding(.horizontal)
-            }
-        }
-    }
-
-    /// Match photos to paragraphs based on keyword matching (only matched photos shown)
-    private func distributePhotos(paragraphs: [String], photos: [ThemePhoto]) -> [Int: Int] {
-        var result: [Int: Int] = [:]  // paragraph index -> photo index
-        var usedPhotos: Set<Int> = []
-
-        // Only match photos to paragraphs by theme/keyword - no forced distribution
-        for (pIndex, paragraph) in paragraphs.enumerated() {
-            let paragraphLower = paragraph.lowercased()
-
-            for (phIndex, themePhoto) in photos.enumerated() {
-                guard !usedPhotos.contains(phIndex) else { continue }
-
-                // Check if paragraph contains the theme or any keywords
-                let themeLower = themePhoto.theme.lowercased()
-                let keywordsMatch = themePhoto.dayKeywords.contains { keyword in
-                    // Only match keywords with 4+ characters to avoid false positives
-                    keyword.count >= 4 && paragraphLower.contains(keyword.lowercased())
-                }
-
-                if paragraphLower.contains(themeLower) || keywordsMatch {
-                    result[pIndex] = phIndex
-                    usedPhotos.insert(phIndex)
-                    break
-                }
-            }
+        // Opening paragraph
+        if let first = paragraphs.first {
+            Text(first)
+                .lineSpacing(4)
+                .padding(.horizontal)
         }
 
-        return result
+        // Topic photos with AI-generated descriptions
+        ForEach(Array(themePhotos.enumerated()), id: \.element.id) { index, themePhoto in
+            TopicPhotoRow(
+                themePhoto: themePhoto,
+                isPhotoLeft: index % 2 == 0,
+                onPhotoTap: {
+                    selectedPhotoIndex = index
+                    showingPhotoViewer = true
+                }
+            )
+        }
+
+        // Remaining paragraphs
+        ForEach(Array(paragraphs.dropFirst().enumerated()), id: \.offset) { _, paragraph in
+            Text(paragraph)
+                .lineSpacing(4)
+                .padding(.horizontal)
+        }
     }
 
     private func deleteMonthBook() {
@@ -338,16 +312,15 @@ struct StatItem: View {
     }
 }
 
-// MARK: - Magazine Photo + Text Row (Photo embedded in text flow)
+// MARK: - Topic Photo Row (AI-extracted topic with description)
 
-struct MagazinePhotoTextRow: View {
-    let text: String
-    let photo: PhotoInfo
+struct TopicPhotoRow: View {
+    let themePhoto: ThemePhoto
     let isPhotoLeft: Bool
     let onPhotoTap: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 14) {
             if isPhotoLeft {
                 photoView
                 textView
@@ -357,33 +330,45 @@ struct MagazinePhotoTextRow: View {
             }
         }
         .padding(.horizontal)
-        .padding(.vertical, 8)
+        .padding(.vertical, 12)
     }
 
     private var photoView: some View {
         Group {
-            if let image = photo.loadImage() {
+            if let image = themePhoto.photo.loadImage() {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 120, height: 160)
+                    .frame(width: 130, height: 170)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
                     .onTapGesture(perform: onPhotoTap)
             } else {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color.secondary.opacity(0.2))
-                    .frame(width: 120, height: 160)
+                    .frame(width: 130, height: 170)
             }
         }
     }
 
     private var textView: some View {
-        Text(text)
-            .font(.body)
-            .lineSpacing(5)
-            .foregroundColor(.primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 8) {
+            // Topic title
+            Text(themePhoto.theme)
+                .font(.headline)
+                .foregroundColor(.primary)
+
+            // Topic description (AI-generated)
+            if let description = themePhoto.description, !description.isEmpty {
+                Text(description)
+                    .font(.body)
+                    .lineSpacing(4)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

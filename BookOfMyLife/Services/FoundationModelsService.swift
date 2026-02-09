@@ -458,6 +458,93 @@ class FoundationModelsService {
         return text.data(using: .utf8)
     }
 
+    // MARK: - Topic Extraction
+
+    /// Extract meaningful topics from daily entries using AI
+    func extractTopics(
+        dailyEntries: [DailyEntryContext],
+        maxTopics: Int = 5
+    ) async throws -> [ExtractedTopic] {
+        let prompt = buildTopicExtractionPrompt(dailyEntries: dailyEntries, maxTopics: maxTopics)
+
+        guard prompt.count < maxPromptLength else {
+            throw FoundationModelsError.promptTooLong
+        }
+
+        let response = try await callLLMWithRetry(prompt: prompt)
+
+        guard let topics = parseTopicsOutput(response) else {
+            throw FoundationModelsError.parsingFailed
+        }
+
+        return topics
+    }
+
+    private func buildTopicExtractionPrompt(dailyEntries: [DailyEntryContext], maxTopics: Int) -> String {
+        // Format entries with day numbers
+        let entriesText = dailyEntries.map { entry in
+            var parts: [String] = ["Day \(entry.dayOfMonth):"]
+            if let mood = entry.mood { parts.append("Mood: \(mood)") }
+            if let text = entry.journalText, !text.isEmpty {
+                let truncated = text.count > 200 ? String(text.prefix(200)) + "..." : text
+                parts.append("Entry: \"\(truncated)\"")
+            }
+            if !entry.keywords.isEmpty {
+                parts.append("Keywords: \(entry.keywords.prefix(5).joined(separator: ", "))")
+            }
+            if !entry.photoDescriptions.isEmpty {
+                parts.append("Photos: \(entry.photoDescriptions.prefix(3).joined(separator: "; "))")
+            }
+            return parts.joined(separator: " | ")
+        }.joined(separator: "\n")
+
+        return """
+        Analyze these journal entries and identify the \(maxTopics) most significant topics or themes.
+
+        ENTRIES:
+        \(entriesText)
+
+        For each topic:
+        1. Give it a short, meaningful name (2-4 words, e.g., "Family Gathering", "Work Project", "Beach Trip")
+        2. List which days are related to this topic
+        3. Write a brief description (1 sentence) that could appear in a magazine layout
+
+        IMPORTANT:
+        - Only identify topics that have actual content in the entries
+        - Topics should be specific and meaningful, not generic like "daily life"
+        - Each topic should relate to at least one day with photos if possible
+
+        Respond with a JSON array:
+        [
+          {
+            "name": "Topic Name",
+            "days": [1, 5, 12],
+            "description": "Brief description for magazine layout."
+          }
+        ]
+        """
+    }
+
+    private func parseTopicsOutput(_ jsonString: String) -> [ExtractedTopic]? {
+        guard let jsonData = extractJSON(from: jsonString) else {
+            print("[Foundation Models] Failed to extract JSON from topics response")
+            return nil
+        }
+
+        // Try parsing as array
+        if let topics = try? JSONDecoder().decode([ExtractedTopic].self, from: jsonData) {
+            return topics
+        }
+
+        // Try parsing as wrapper object
+        if let wrapper = try? JSONDecoder().decode(TopicsWrapper.self, from: jsonData) {
+            return wrapper.topics
+        }
+
+        print("[Foundation Models] Failed to parse topics")
+        return nil
+    }
+
     // MARK: - Helpers
 
     private func getMonthName(_ month: Int) -> String {

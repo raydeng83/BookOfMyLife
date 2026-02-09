@@ -33,11 +33,14 @@ class MonthlyPackGenerator {
         // Calculate statistics
         let stats = calculateMonthlyStats(from: updatedDigests)
 
+        // Extract daily entry contexts for AI
+        let dailyEntries = extractDailyEntryContexts(from: updatedDigests)
+
         // Generate AI summary (try Foundation Models, fallback to template)
         let (summary, method) = await generateSummary(from: updatedDigests, stats: stats, month: month, year: year)
 
-        // Select one photo per top theme
-        let themePhotos = selectThemePhotos(from: updatedDigests, stats: stats, maxThemes: 5)
+        // Extract topics using AI and select photos (try AI, fallback to keyword matching)
+        let themePhotos = await selectPhotosWithAI(from: updatedDigests, dailyEntries: dailyEntries, stats: stats, maxTopics: 5)
 
         // Update Core Data on the context's thread
         return await context.perform {
@@ -319,7 +322,91 @@ class MonthlyPackGenerator {
         return parts.joined(separator: "")
     }
 
-    // MARK: - Photo Selection
+    // MARK: - AI-Powered Photo Selection
+
+    /// Select photos using AI-extracted topics
+    private func selectPhotosWithAI(from digests: [DailyDigest], dailyEntries: [DailyEntryContext], stats: MonthlyStats, maxTopics: Int) async -> [ThemePhoto] {
+        // Try AI topic extraction (iOS 26+)
+        if #available(iOS 26.0, *) {
+            let service = FoundationModelsService()
+
+            if await service.isAvailable() {
+                do {
+                    print("[ThemePhotos] Extracting topics using AI...")
+                    let topics = try await service.extractTopics(dailyEntries: dailyEntries, maxTopics: maxTopics)
+                    print("[ThemePhotos] AI extracted \(topics.count) topics: \(topics.map { $0.name })")
+
+                    let themePhotos = selectPhotosForTopics(topics: topics, digests: digests)
+                    if !themePhotos.isEmpty {
+                        return themePhotos
+                    }
+                } catch {
+                    print("[ThemePhotos] AI topic extraction failed: \(error). Falling back to keyword matching.")
+                }
+            }
+        }
+
+        // Fallback to keyword-based selection
+        return selectThemePhotos(from: digests, stats: stats, maxThemes: maxTopics)
+    }
+
+    /// Select best photo for each AI-extracted topic
+    private func selectPhotosForTopics(topics: [ExtractedTopic], digests: [DailyDigest]) -> [ThemePhoto] {
+        var themePhotos: [ThemePhoto] = []
+        var usedPhotoIds: Set<UUID> = []
+
+        // Create a map of day number to digest
+        let calendar = Calendar.current
+        var dayToDigest: [Int: DailyDigest] = [:]
+        for digest in digests {
+            if let date = digest.date {
+                let day = calendar.component(.day, from: date)
+                dayToDigest[day] = digest
+            }
+        }
+
+        for topic in topics {
+            var bestMatch: (photo: PhotoInfo, score: Double)?
+
+            // Look at digests for the days associated with this topic
+            for dayNum in topic.days {
+                guard let digest = dayToDigest[dayNum] else { continue }
+                guard let photosData = digest.photosData else { continue }
+
+                let photos = [PhotoInfo].decoded(from: photosData)
+
+                for photo in photos {
+                    guard !usedPhotoIds.contains(photo.id) else { continue }
+
+                    // Score the photo
+                    var score = photo.qualityScore
+                    if digest.isStarred { score += 0.3 }
+                    if photo.hasFaces { score += 0.2 }
+
+                    if bestMatch == nil || score > bestMatch!.score {
+                        bestMatch = (photo, score)
+                    }
+                }
+            }
+
+            // Add best photo for this topic
+            if let match = bestMatch {
+                let themePhoto = ThemePhoto(
+                    theme: topic.name,
+                    photo: match.photo,
+                    dayKeywords: topic.days.map { "Day \($0)" },
+                    description: topic.description
+                )
+                themePhotos.append(themePhoto)
+                usedPhotoIds.insert(match.photo.id)
+                print("[ThemePhotos] Selected photo for topic '\(topic.name)' from days \(topic.days)")
+            }
+        }
+
+        return themePhotos
+    }
+
+    // MARK: - Keyword-Based Photo Selection (Fallback)
 
     /// Select one best photo for each top theme based on keywords from the day
     private func selectThemePhotos(from digests: [DailyDigest], stats: MonthlyStats, maxThemes: Int) -> [ThemePhoto] {
