@@ -447,15 +447,29 @@ class FoundationModelsService {
     }
 
     private func extractJSON(from text: String) -> Data? {
+        var cleanedText = text
+
+        // Strip markdown code blocks
+        cleanedText = cleanedText.replacingOccurrences(of: "```json", with: "")
+        cleanedText = cleanedText.replacingOccurrences(of: "```", with: "")
+        cleanedText = cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Try to find JSON array in response
+        if let startIndex = cleanedText.firstIndex(of: "["),
+           let endIndex = cleanedText.lastIndex(of: "]") {
+            let jsonString = String(cleanedText[startIndex...endIndex])
+            return jsonString.data(using: .utf8)
+        }
+
         // Try to find JSON object in response
-        if let startIndex = text.firstIndex(of: "{"),
-           let endIndex = text.lastIndex(of: "}") {
-            let jsonString = String(text[startIndex...endIndex])
+        if let startIndex = cleanedText.firstIndex(of: "{"),
+           let endIndex = cleanedText.lastIndex(of: "}") {
+            let jsonString = String(cleanedText[startIndex...endIndex])
             return jsonString.data(using: .utf8)
         }
 
         // If entire response is JSON
-        return text.data(using: .utf8)
+        return cleanedText.data(using: .utf8)
     }
 
     // MARK: - Topic Extraction
