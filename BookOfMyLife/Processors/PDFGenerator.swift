@@ -193,7 +193,7 @@ class PDFGenerator {
         }
     }
 
-    // MARK: - Theme Photo Layout (Side-by-Side)
+    // MARK: - Magazine Layout with Embedded Photos
 
     private func drawThemePhotoLayout(
         context: UIGraphicsPDFRendererContext,
@@ -223,37 +223,37 @@ class PDFGenerator {
         drawLine(at: currentY, width: contentWidth)
         currentY += 25
 
-        // Draw opening paragraph
-        if paragraphs.count > 0 {
-            currentY = drawParagraph(paragraphs[0], at: currentY, width: contentWidth)
-            currentY += 25
-        }
+        // Distribute photos to paragraphs
+        let photoAssignments = distributePhotos(paragraphs: paragraphs, photos: themePhotos)
 
-        // Draw theme photos with side-by-side layout
-        for (index, themePhoto) in themePhotos.enumerated() {
-            let rowHeight: CGFloat = 160
+        // Draw paragraphs with embedded photos
+        for (index, paragraph) in paragraphs.enumerated() {
+            if let photoIndex = photoAssignments[index], photoIndex < themePhotos.count {
+                // Draw paragraph with photo beside it
+                let rowHeight = estimatePhotoTextRowHeight(paragraph, width: contentWidth)
 
-            // Check if we need a new page
-            if currentY + rowHeight > pageRect.height - margin - 50 {
-                context.beginPage()
-                currentY = margin
-            }
+                if currentY + rowHeight > pageRect.height - margin - 50 {
+                    context.beginPage()
+                    currentY = margin
+                }
 
-            // Alternate left/right layout
-            let isReversed = index % 2 == 1
-            currentY = drawThemePhotoRow(themePhoto, at: currentY, width: contentWidth, isReversed: isReversed)
-            currentY += 20
-        }
-
-        // Draw remaining paragraphs
-        if paragraphs.count > 1 {
-            for i in 1..<paragraphs.count {
-                let estimatedHeight = estimateTextHeight(paragraphs[i], width: contentWidth)
+                let isPhotoLeft = index % 2 == 0
+                currentY = drawPhotoTextRow(
+                    themePhotos[photoIndex].photo,
+                    text: paragraph,
+                    at: currentY,
+                    width: contentWidth,
+                    isPhotoLeft: isPhotoLeft
+                )
+                currentY += 20
+            } else {
+                // Draw paragraph only
+                let estimatedHeight = estimateTextHeight(paragraph, width: contentWidth)
                 if currentY + estimatedHeight > pageRect.height - margin - 50 {
                     context.beginPage()
                     currentY = margin
                 }
-                currentY = drawParagraph(paragraphs[i], at: currentY, width: contentWidth)
+                currentY = drawParagraph(paragraph, at: currentY, width: contentWidth)
                 currentY += 15
             }
         }
@@ -273,81 +273,98 @@ class PDFGenerator {
         }
     }
 
-    private func drawThemePhotoRow(_ themePhoto: ThemePhoto, at y: CGFloat, width: CGFloat, isReversed: Bool) -> CGFloat {
-        let photoSize: CGFloat = 140
-        let spacing: CGFloat = 20
-        let textWidth = width - photoSize - spacing
+    /// Distribute photos to paragraphs based on keyword matching
+    private func distributePhotos(paragraphs: [String], photos: [ThemePhoto]) -> [Int: Int] {
+        var result: [Int: Int] = [:]
+        var usedPhotos: Set<Int> = []
+
+        // Match photos to paragraphs by theme/keyword
+        for (pIndex, paragraph) in paragraphs.enumerated() {
+            let paragraphLower = paragraph.lowercased()
+
+            for (phIndex, themePhoto) in photos.enumerated() {
+                guard !usedPhotos.contains(phIndex) else { continue }
+
+                let themeLower = themePhoto.theme.lowercased()
+                let keywordsMatch = themePhoto.dayKeywords.contains { keyword in
+                    paragraphLower.contains(keyword.lowercased())
+                }
+
+                if paragraphLower.contains(themeLower) || keywordsMatch {
+                    result[pIndex] = phIndex
+                    usedPhotos.insert(phIndex)
+                    break
+                }
+            }
+        }
+
+        // Distribute remaining photos evenly
+        let remainingPhotos = photos.indices.filter { !usedPhotos.contains($0) }
+        let availableParagraphs = paragraphs.indices.filter { result[$0] == nil }
+        for (i, photoIndex) in remainingPhotos.enumerated() {
+            if i < availableParagraphs.count {
+                result[availableParagraphs[i]] = photoIndex
+            }
+        }
+
+        return result
+    }
+
+    private func drawPhotoTextRow(_ photo: PhotoInfo, text: String, at y: CGFloat, width: CGFloat, isPhotoLeft: Bool) -> CGFloat {
+        let photoWidth: CGFloat = 120
+        let photoHeight: CGFloat = 150
+        let spacing: CGFloat = 15
+        let textWidth = width - photoWidth - spacing
 
         let photoX: CGFloat
         let textX: CGFloat
 
-        if isReversed {
+        if isPhotoLeft {
+            photoX = margin
+            textX = margin + photoWidth + spacing
+        } else {
             textX = margin
             photoX = margin + textWidth + spacing
-        } else {
-            photoX = margin
-            textX = margin + photoSize + spacing
         }
 
         // Draw photo
-        if let image = themePhoto.photo.loadImage() {
-            let photoRect = CGRect(x: photoX, y: y, width: photoSize, height: photoSize)
+        if let image = photo.loadImage() {
+            let photoRect = CGRect(x: photoX, y: y, width: photoWidth, height: photoHeight)
 
-            // Draw with rounded corners effect
             UIGraphicsGetCurrentContext()?.saveGState()
-            let clipPath = UIBezierPath(roundedRect: photoRect, cornerRadius: 10)
+            let clipPath = UIBezierPath(roundedRect: photoRect, cornerRadius: 8)
             clipPath.addClip()
             image.draw(in: photoRect)
             UIGraphicsGetCurrentContext()?.restoreGState()
 
-            // Draw border
+            // Light border
             UIColor.lightGray.withAlphaComponent(0.3).setStroke()
-            clipPath.lineWidth = 1
+            clipPath.lineWidth = 0.5
             clipPath.stroke()
         }
 
-        // Draw theme badge
-        var textY = y
-        let badgeAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 12, weight: .bold),
-            .foregroundColor: UIColor.systemBlue
+        // Draw text beside photo
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 5
+        paragraphStyle.alignment = .justified
+
+        let textAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 12),
+            .foregroundColor: UIColor.darkGray,
+            .paragraphStyle: paragraphStyle
         ]
-        let badgeText = "● \(themePhoto.theme)"
-        badgeText.draw(at: CGPoint(x: textX, y: textY), withAttributes: badgeAttributes)
-        textY += 22
 
-        // Draw keywords
-        if !themePhoto.dayKeywords.isEmpty {
-            let keywordsText = themePhoto.dayKeywords.prefix(4).joined(separator: " • ")
-            let keywordsAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 10),
-                .foregroundColor: UIColor.gray
-            ]
-            let keywordsRect = CGRect(x: textX, y: textY, width: textWidth, height: 30)
-            keywordsText.draw(in: keywordsRect, withAttributes: keywordsAttributes)
-            textY += 25
-        }
+        let textRect = CGRect(x: textX, y: y, width: textWidth, height: photoHeight + 50)
+        text.draw(in: textRect, withAttributes: textAttributes)
 
-        // Draw caption or detected scenes
-        let captionText: String
-        if let caption = themePhoto.photo.caption, !caption.isEmpty {
-            captionText = caption
-        } else if !themePhoto.photo.detectedScenes.isEmpty {
-            captionText = themePhoto.photo.detectedScenes.prefix(3).joined(separator: ", ")
-        } else {
-            captionText = ""
-        }
+        return y + max(photoHeight, estimateTextHeight(text, width: textWidth)) + 10
+    }
 
-        if !captionText.isEmpty {
-            let captionAttributes: [NSAttributedString.Key: Any] = [
-                .font: UIFont.systemFont(ofSize: 11),
-                .foregroundColor: UIColor.darkGray
-            ]
-            let captionRect = CGRect(x: textX, y: textY, width: textWidth, height: 60)
-            captionText.draw(in: captionRect, withAttributes: captionAttributes)
-        }
-
-        return y + photoSize + 10
+    private func estimatePhotoTextRowHeight(_ text: String, width: CGFloat) -> CGFloat {
+        let photoHeight: CGFloat = 150
+        let textWidth = width - 120 - 15
+        let textHeight = estimateTextHeight(text, width: textWidth)
+        return max(photoHeight, textHeight) + 20
     }
 
     // MARK: - Drawing Helpers

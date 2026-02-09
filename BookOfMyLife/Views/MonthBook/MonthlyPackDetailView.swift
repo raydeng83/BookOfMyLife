@@ -203,36 +203,68 @@ struct MonthlyPackDetailView: View {
     @ViewBuilder
     private var magazineContent: some View {
         let paragraphs = summaryParagraphs
+        let photoQueue = distributePhotos(paragraphs: paragraphs, photos: themePhotos)
 
-        // Opening paragraph
-        if paragraphs.count > 0 {
-            Text(paragraphs[0])
-                .lineSpacing(4)
-                .padding(.horizontal)
-        }
-
-        // Theme photos with side-by-side layout
-        if !themePhotos.isEmpty {
-            ForEach(Array(themePhotos.enumerated()), id: \.element.id) { index, themePhoto in
-                ThemePhotoRow(
-                    themePhoto: themePhoto,
-                    isReversed: index % 2 == 1,
-                    onTap: {
-                        selectedPhotoIndex = index
+        ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
+            // Check if this paragraph has an associated photo
+            if let photoIndex = photoQueue[index] {
+                // Photo beside text layout
+                MagazinePhotoTextRow(
+                    text: paragraph,
+                    photo: themePhotos[photoIndex].photo,
+                    isPhotoLeft: index % 2 == 0,
+                    onPhotoTap: {
+                        selectedPhotoIndex = photoIndex
                         showingPhotoViewer = true
                     }
                 )
-            }
-        }
-
-        // Remaining paragraphs (journey and closing)
-        if paragraphs.count > 1 {
-            ForEach(1..<paragraphs.count, id: \.self) { index in
-                Text(paragraphs[index])
+            } else {
+                // Text only
+                Text(paragraph)
                     .lineSpacing(4)
                     .padding(.horizontal)
             }
         }
+    }
+
+    /// Distribute photos across paragraphs based on keyword matching
+    private func distributePhotos(paragraphs: [String], photos: [ThemePhoto]) -> [Int: Int] {
+        var result: [Int: Int] = [:]  // paragraph index -> photo index
+        var usedPhotos: Set<Int> = []
+
+        // First pass: match photos to paragraphs by theme/keyword
+        for (pIndex, paragraph) in paragraphs.enumerated() {
+            let paragraphLower = paragraph.lowercased()
+
+            for (phIndex, themePhoto) in photos.enumerated() {
+                guard !usedPhotos.contains(phIndex) else { continue }
+
+                // Check if paragraph contains the theme or any keywords
+                let themeLower = themePhoto.theme.lowercased()
+                let keywordsMatch = themePhoto.dayKeywords.contains { keyword in
+                    paragraphLower.contains(keyword.lowercased())
+                }
+
+                if paragraphLower.contains(themeLower) || keywordsMatch {
+                    result[pIndex] = phIndex
+                    usedPhotos.insert(phIndex)
+                    break
+                }
+            }
+        }
+
+        // Second pass: distribute remaining photos evenly if any left
+        let remainingPhotos = photos.indices.filter { !usedPhotos.contains($0) }
+        if !remainingPhotos.isEmpty && paragraphs.count > 0 {
+            let availableParagraphs = paragraphs.indices.filter { result[$0] == nil }
+            for (i, photoIndex) in remainingPhotos.enumerated() {
+                if i < availableParagraphs.count {
+                    result[availableParagraphs[i]] = photoIndex
+                }
+            }
+        }
+
+        return result
     }
 
     private func deleteMonthBook() {
@@ -316,81 +348,52 @@ struct StatItem: View {
     }
 }
 
-// MARK: - Theme Photo Row (Side-by-Side Layout)
+// MARK: - Magazine Photo + Text Row (Photo embedded in text flow)
 
-struct ThemePhotoRow: View {
-    let themePhoto: ThemePhoto
-    let isReversed: Bool  // Alternate photo left/right
-    let onTap: () -> Void
+struct MagazinePhotoTextRow: View {
+    let text: String
+    let photo: PhotoInfo
+    let isPhotoLeft: Bool
+    let onPhotoTap: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            if isReversed {
-                textContent
-                photoContent
+        HStack(alignment: .top, spacing: 12) {
+            if isPhotoLeft {
+                photoView
+                textView
             } else {
-                photoContent
-                textContent
+                textView
+                photoView
             }
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
     }
 
-    private var photoContent: some View {
+    private var photoView: some View {
         Group {
-            if let image = themePhoto.photo.loadImage() {
+            if let image = photo.loadImage() {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 140, height: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
-                    .onTapGesture(perform: onTap)
+                    .frame(width: 120, height: 160)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    .onTapGesture(perform: onPhotoTap)
             } else {
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(Color.secondary.opacity(0.2))
-                    .frame(width: 140, height: 180)
+                    .frame(width: 120, height: 160)
             }
         }
     }
 
-    private var textContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Theme badge
-            Text(themePhoto.theme)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.accentColor)
-                .clipShape(Capsule())
-
-            // Related keywords
-            if !themePhoto.dayKeywords.isEmpty {
-                Text(themePhoto.dayKeywords.prefix(4).joined(separator: " • "))
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .lineLimit(2)
-            }
-
-            // Photo caption or detected scenes
-            if let caption = themePhoto.photo.caption, !caption.isEmpty {
-                Text(caption)
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-                    .lineLimit(4)
-            } else if !themePhoto.photo.detectedScenes.isEmpty {
-                Text(themePhoto.photo.detectedScenes.prefix(5).joined(separator: ", "))
-                    .font(.subheadline)
-                    .foregroundColor(.primary)
-                    .lineLimit(3)
-            }
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+    private var textView: some View {
+        Text(text)
+            .font(.body)
+            .lineSpacing(5)
+            .foregroundColor(.primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
