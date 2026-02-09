@@ -100,13 +100,13 @@ struct MonthlyPackDetailView: View {
                     }
                     .padding(.horizontal)
 
-                    if summaryParagraphs.isEmpty {
+                    if themePhotos.isEmpty && openingText == nil {
                         Text("No summary generated yet")
                             .foregroundColor(.secondary)
                             .italic()
                             .padding(.horizontal)
                     } else {
-                        // Magazine layout: text and photos interspersed
+                        // New Yorker style magazine layout
                         magazineContent
                     }
                 }
