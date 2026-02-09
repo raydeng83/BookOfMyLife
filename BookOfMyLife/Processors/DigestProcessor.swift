@@ -14,9 +14,9 @@ class DigestProcessor {
     private let nlpAnalyzer = NLPAnalyzer()
 
     // Process a daily digest (add AI metadata if not already processed)
-    func processDigest(_ digest: DailyDigest, context: NSManagedObjectContext) async {
-        // Check if already processed
-        if digest.lastProcessedAt != nil {
+    func processDigest(_ digest: DailyDigest, context: NSManagedObjectContext, forceReprocess: Bool = false) async {
+        // Check if already processed (unless forced)
+        if digest.lastProcessedAt != nil && !forceReprocess {
             return
         }
 
@@ -71,9 +71,39 @@ class DigestProcessor {
     }
 
     // Batch process multiple digests
-    func processDigests(_ digests: [DailyDigest], context: NSManagedObjectContext) async {
+    func processDigests(_ digests: [DailyDigest], context: NSManagedObjectContext, forceReprocess: Bool = false) async {
         for digest in digests {
-            await processDigest(digest, context: context)
+            await processDigest(digest, context: context, forceReprocess: forceReprocess)
+        }
+    }
+
+    // Reprocess only photos for existing digests (updates photo metadata without resetting other data)
+    func reprocessPhotos(_ digest: DailyDigest, context: NSManagedObjectContext) async {
+        guard let photosData = digest.photosData else { return }
+
+        var photos = [PhotoInfo].decoded(from: photosData)
+        var hasChanges = false
+
+        for i in 0..<photos.count {
+            // Only reprocess if scenes are empty
+            if photos[i].detectedScenes.isEmpty {
+                if let image = photos[i].loadImage() {
+                    let (scenes, hasFaces, quality, ocrText) = await visionAnalyzer.analyzePhoto(image)
+
+                    photos[i].detectedScenes = scenes
+                    photos[i].hasFaces = hasFaces
+                    photos[i].qualityScore = quality
+                    photos[i].ocrText = ocrText
+                    hasChanges = true
+
+                    print("[DigestProcessor] Analyzed photo: \(scenes.joined(separator: ", "))")
+                }
+            }
+        }
+
+        if hasChanges {
+            digest.photosData = photos.encoded()
+            try? context.save()
         }
     }
 }

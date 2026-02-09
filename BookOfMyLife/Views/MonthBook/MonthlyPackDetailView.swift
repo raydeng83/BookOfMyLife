@@ -375,24 +375,17 @@ struct ThemePhotoRow: View {
                     .lineLimit(2)
             }
 
-            // Photo caption if available
+            // Photo caption or detected scenes
             if let caption = themePhoto.photo.caption, !caption.isEmpty {
                 Text(caption)
                     .font(.subheadline)
                     .foregroundColor(.primary)
                     .lineLimit(4)
             } else if !themePhoto.photo.detectedScenes.isEmpty {
-                Text(themePhoto.photo.detectedScenes.prefix(3).joined(separator: ", "))
+                Text(themePhoto.photo.detectedScenes.prefix(5).joined(separator: ", "))
                     .font(.subheadline)
                     .foregroundColor(.primary)
-                    .italic()
                     .lineLimit(3)
-            } else {
-                // Fallback text when no caption or scenes
-                Text("A memorable moment")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .italic()
             }
 
             Spacer()

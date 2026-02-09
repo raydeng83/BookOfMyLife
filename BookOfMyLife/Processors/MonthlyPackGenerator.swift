@@ -10,6 +10,7 @@ import CoreData
 
 class MonthlyPackGenerator {
     private let nlpAnalyzer = NLPAnalyzer()
+    private let digestProcessor = DigestProcessor()
 
     // Generate or update monthly pack for a given month/year
     func generateMonthlyPack(year: Int, month: Int, context: NSManagedObjectContext) async -> MonthlyPack? {
@@ -20,14 +21,23 @@ class MonthlyPackGenerator {
             return nil
         }
 
+        // Ensure all photos are analyzed (reprocess if needed)
+        print("[MonthlyPack] Reprocessing \(digests.count) digests for photo analysis...")
+        for digest in digests {
+            await digestProcessor.reprocessPhotos(digest, context: context)
+        }
+
+        // Re-fetch digests to get updated photo data
+        let updatedDigests = fetchDigestsForMonth(year: year, month: month, context: context)
+
         // Calculate statistics
-        let stats = calculateMonthlyStats(from: digests)
+        let stats = calculateMonthlyStats(from: updatedDigests)
 
         // Generate AI summary (try Foundation Models, fallback to template)
-        let (summary, method) = await generateSummary(from: digests, stats: stats, month: month, year: year)
+        let (summary, method) = await generateSummary(from: updatedDigests, stats: stats, month: month, year: year)
 
         // Select one photo per top theme
-        let themePhotos = selectThemePhotos(from: digests, stats: stats, maxThemes: 5)
+        let themePhotos = selectThemePhotos(from: updatedDigests, stats: stats, maxThemes: 5)
 
         // Update Core Data on the context's thread
         return await context.perform {
