@@ -526,22 +526,54 @@ class FoundationModelsService {
     }
 
     private func parseTopicsOutput(_ jsonString: String) -> [ExtractedTopic]? {
+        print("[Foundation Models] Raw topics response:\n\(jsonString)")
+
         guard let jsonData = extractJSON(from: jsonString) else {
             print("[Foundation Models] Failed to extract JSON from topics response")
             return nil
         }
 
         // Try parsing as array
-        if let topics = try? JSONDecoder().decode([ExtractedTopic].self, from: jsonData) {
+        do {
+            let topics = try JSONDecoder().decode([ExtractedTopic].self, from: jsonData)
+            print("[Foundation Models] Parsed \(topics.count) topics as array")
             return topics
+        } catch {
+            print("[Foundation Models] Array parsing failed: \(error)")
         }
 
         // Try parsing as wrapper object
-        if let wrapper = try? JSONDecoder().decode(TopicsWrapper.self, from: jsonData) {
+        do {
+            let wrapper = try JSONDecoder().decode(TopicsWrapper.self, from: jsonData)
+            print("[Foundation Models] Parsed \(wrapper.topics.count) topics from wrapper")
             return wrapper.topics
+        } catch {
+            print("[Foundation Models] Wrapper parsing failed: \(error)")
         }
 
-        print("[Foundation Models] Failed to parse topics")
+        // Try manual parsing if structure is different
+        if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]] {
+            var topics: [ExtractedTopic] = []
+            for item in json {
+                if let name = item["name"] as? String,
+                   let description = item["description"] as? String {
+                    // Handle days as either [Int] or [String]
+                    var days: [Int] = []
+                    if let daysArray = item["days"] as? [Int] {
+                        days = daysArray
+                    } else if let daysArray = item["days"] as? [String] {
+                        days = daysArray.compactMap { Int($0) }
+                    }
+                    topics.append(ExtractedTopic(name: name, days: days, description: description))
+                }
+            }
+            if !topics.isEmpty {
+                print("[Foundation Models] Manually parsed \(topics.count) topics")
+                return topics
+            }
+        }
+
+        print("[Foundation Models] Failed to parse topics - no valid format found")
         return nil
     }
 
