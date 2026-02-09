@@ -231,22 +231,14 @@ struct MonthlyPackDetailView: View {
 
     @ViewBuilder
     private var magazineContent: some View {
-        // Opening - intro section
+        // Opening
         if let opening = openingText {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("THE MONTH BEGINS")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.accentColor)
-                    .kerning(1.5)
-
-                Text(opening)
-                    .font(.body)
-                    .lineSpacing(6)
-                    .foregroundColor(.primary.opacity(0.85))
-            }
-            .padding(.horizontal)
-            .padding(.bottom, 12)
+            Text(opening)
+                .font(.body)
+                .lineSpacing(6)
+                .foregroundColor(.primary.opacity(0.85))
+                .padding(.horizontal)
+                .padding(.bottom, 12)
         }
 
         // Story sections - each photo with its narrative
@@ -261,22 +253,14 @@ struct MonthlyPackDetailView: View {
             )
         }
 
-        // Closing - ending section
+        // Closing
         if let closing = closingText {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("LOOKING BACK")
-                    .font(.caption)
-                    .fontWeight(.bold)
-                    .foregroundColor(.accentColor)
-                    .kerning(1.5)
-
-                Text(closing)
-                    .font(.body)
-                    .lineSpacing(6)
-                    .foregroundColor(.primary.opacity(0.85))
-            }
-            .padding(.horizontal)
-            .padding(.top, 16)
+            Text(closing)
+                .font(.body)
+                .lineSpacing(6)
+                .foregroundColor(.primary.opacity(0.85))
+                .padding(.horizontal)
+                .padding(.top, 16)
         }
     }
 
@@ -369,28 +353,17 @@ struct StorySection: View {
     let onPhotoTap: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Section title
-            Text(themePhoto.theme.uppercased())
-                .font(.caption)
-                .fontWeight(.bold)
-                .foregroundColor(.accentColor)
-                .kerning(1.5)
-                .padding(.horizontal)
-
-            // Photo and narrative side by side
-            HStack(alignment: .top, spacing: 16) {
-                if isPhotoLeft {
-                    photoView
-                    narrativeView
-                } else {
-                    narrativeView
-                    photoView
-                }
+        HStack(alignment: .top, spacing: 16) {
+            if isPhotoLeft {
+                photoView
+                narrativeView
+            } else {
+                narrativeView
+                photoView
             }
-            .padding(.horizontal)
         }
-        .padding(.vertical, 16)
+        .padding(.horizontal)
+        .padding(.vertical, 12)
     }
 
     private var photoView: some View {

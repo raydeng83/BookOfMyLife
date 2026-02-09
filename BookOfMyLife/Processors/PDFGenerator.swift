@@ -306,20 +306,8 @@ class PDFGenerator {
         return (opening, closing)
     }
 
-    /// Draw opening section (same style as photo text)
+    /// Draw opening section
     private func drawOpeningText(_ text: String, at y: CGFloat, width: CGFloat) -> CGFloat {
-        var currentY = y
-
-        // Section title
-        let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
-            .foregroundColor: UIColor.systemBlue,
-            .kern: 1.5
-        ]
-        "THE MONTH BEGINS".draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
-        currentY += 18
-
-        // Body text
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = 5
 
@@ -330,26 +318,14 @@ class PDFGenerator {
         ]
 
         let textHeight = estimateTextHeight(text, width: width)
-        let textRect = CGRect(x: margin, y: currentY, width: width, height: textHeight + 10)
+        let textRect = CGRect(x: margin, y: y, width: width, height: textHeight + 10)
         text.draw(in: textRect, withAttributes: attributes)
 
-        return currentY + textHeight + 10
+        return y + textHeight + 10
     }
 
-    /// Draw closing section (same style as photo text)
+    /// Draw closing section
     private func drawClosingText(_ text: String, at y: CGFloat, width: CGFloat) -> CGFloat {
-        var currentY = y
-
-        // Section title
-        let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
-            .foregroundColor: UIColor.systemBlue,
-            .kern: 1.5
-        ]
-        "LOOKING BACK".draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
-        currentY += 18
-
-        // Body text
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = 5
 
@@ -360,26 +336,14 @@ class PDFGenerator {
         ]
 
         let textHeight = estimateTextHeight(text, width: width)
-        let textRect = CGRect(x: margin, y: currentY, width: width, height: textHeight + 10)
+        let textRect = CGRect(x: margin, y: y, width: width, height: textHeight + 10)
         text.draw(in: textRect, withAttributes: attributes)
 
-        return currentY + textHeight + 10
+        return y + textHeight + 10
     }
 
-    /// Draw a story section with title, photo, and narrative
+    /// Draw a story section with photo and narrative
     private func drawStorySection(_ themePhoto: ThemePhoto, at y: CGFloat, width: CGFloat, isPhotoLeft: Bool) -> CGFloat {
-        var currentY = y
-
-        // Draw section title (uppercase, small)
-        let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
-            .foregroundColor: UIColor.systemBlue,
-            .kern: 1.5
-        ]
-        themePhoto.theme.uppercased().draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
-        currentY += 18
-
-        // Photo and narrative layout
         let photoWidth: CGFloat = 140
         let photoHeight: CGFloat = 175
         let spacing: CGFloat = 16
@@ -398,7 +362,7 @@ class PDFGenerator {
 
         // Draw photo
         if let image = themePhoto.photo.loadImage() {
-            let photoRect = CGRect(x: photoX, y: currentY, width: photoWidth, height: photoHeight)
+            let photoRect = CGRect(x: photoX, y: y, width: photoWidth, height: photoHeight)
 
             UIGraphicsGetCurrentContext()?.saveGState()
             let clipPath = UIBezierPath(roundedRect: photoRect, cornerRadius: 6)
@@ -418,15 +382,15 @@ class PDFGenerator {
                 .paragraphStyle: paragraphStyle
             ]
 
-            let textRect = CGRect(x: textX, y: currentY, width: textWidth, height: photoHeight)
+            let textRect = CGRect(x: textX, y: y, width: textWidth, height: photoHeight)
             description.draw(in: textRect, withAttributes: textAttributes)
         }
 
-        return currentY + photoHeight
+        return y + photoHeight
     }
 
     private func estimateStorySectionHeight(_ themePhoto: ThemePhoto, width: CGFloat) -> CGFloat {
-        return 200 // Title + photo height
+        return 180 // Photo height
     }
 
     // MARK: - Drawing Helpers
