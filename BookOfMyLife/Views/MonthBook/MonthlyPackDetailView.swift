@@ -380,18 +380,24 @@ struct ThemePhotoRow: View {
                 Text(caption)
                     .font(.subheadline)
                     .foregroundColor(.primary)
-                    .lineLimit(3)
+                    .lineLimit(4)
             } else if !themePhoto.photo.detectedScenes.isEmpty {
                 Text(themePhoto.photo.detectedScenes.prefix(3).joined(separator: ", "))
                     .font(.subheadline)
                     .foregroundColor(.primary)
                     .italic()
-                    .lineLimit(2)
+                    .lineLimit(3)
+            } else {
+                // Fallback text when no caption or scenes
+                Text("A memorable moment")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .italic()
             }
 
-            Spacer(minLength: 0)
+            Spacer()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
     }
 }
 
