@@ -7,6 +7,7 @@
 
 import SwiftUI
 import CoreData
+import PDFKit
 
 struct YearlySummaryDetailView: View {
     @ObservedObject var summary: YearlySummary
@@ -76,6 +77,19 @@ struct YearlySummaryDetailView: View {
                     .padding(.horizontal)
                 }
 
+                Button(action: { generatePDF() }) {
+                    HStack {
+                        Image(systemName: "doc.badge.plus")
+                        Text(summary.pdfData != nil ? "Regenerate PDF" : "Generate PDF")
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .padding(.horizontal)
+
                 Button(action: { showingEditor = true }) {
                     HStack {
                         Image(systemName: "pencil")
@@ -144,6 +158,19 @@ struct YearlySummaryDetailView: View {
             }
         } message: {
             Text("This will permanently delete this year book and its summary. Your monthly summaries and daily entries will not be affected.")
+        }
+        .sheet(isPresented: $showingPDFViewer) {
+            if let pdfData = summary.pdfData {
+                YearlyPDFViewerView(pdfData: pdfData)
+            }
+        }
+    }
+
+    private func generatePDF() {
+        let generator = PDFGenerator()
+        if let pdfData = generator.generateYearlyPDF(summary: summary) {
+            summary.pdfData = pdfData
+            try? viewContext.save()
         }
     }
 
@@ -221,5 +248,48 @@ struct YearlyStatsCard: View {
         .padding()
         .background(Color.secondary.opacity(0.1))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: - PDF Viewer
+
+struct YearlyPDFViewerView: View {
+    let pdfData: Data
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            YearlyPDFKitView(pdfData: pdfData)
+                .navigationTitle("PDF Preview")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                    ToolbarItem(placement: .primaryAction) {
+                        ShareLink(item: pdfData, preview: SharePreview("Year Book PDF", image: Image(systemName: "doc.richtext")))
+                    }
+                }
+        }
+    }
+}
+
+struct YearlyPDFKitView: UIViewRepresentable {
+    let pdfData: Data
+
+    func makeUIView(context: Context) -> PDFView {
+        let pdfView = PDFView()
+        pdfView.autoScales = true
+        pdfView.displayMode = .singlePageContinuous
+        pdfView.displayDirection = .vertical
+        return pdfView
+    }
+
+    func updateUIView(_ pdfView: PDFView, context: Context) {
+        if let document = PDFDocument(data: pdfData) {
+            pdfView.document = document
+        }
     }
 }

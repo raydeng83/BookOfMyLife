@@ -8,6 +8,16 @@
 import Foundation
 import UIKit
 
+// MARK: - Theme Photo (photo matched to a theme/keyword)
+
+struct ThemePhoto: Codable, Identifiable {
+    var id: UUID { photo.id }
+    var theme: String
+    var photo: PhotoInfo
+    var dayKeywords: [String]  // All keywords from the day this photo was taken
+    var description: String?   // Optional description for the theme
+}
+
 // MARK: - Photo Information
 
 struct PhotoInfo: Codable, Identifiable {

@@ -26,8 +26,8 @@ class MonthlyPackGenerator {
         // Generate AI summary (try Foundation Models, fallback to template)
         let (summary, method) = await generateSummary(from: digests, stats: stats, month: month, year: year)
 
-        // Select best photos for the month
-        let selectedPhotos = selectBestPhotos(from: digests, maxCount: 12)
+        // Select one photo per top theme
+        let themePhotos = selectThemePhotos(from: digests, stats: stats, maxThemes: 5)
 
         // Update Core Data on the context's thread
         return await context.perform {
@@ -39,7 +39,9 @@ class MonthlyPackGenerator {
             pack.aiSummaryText = summary
             pack.generationMethod = method
             pack.generatedAt = Date()
-            pack.selectedPhotosData = selectedPhotos.encoded()
+            pack.themePhotosData = themePhotos.encoded()
+            // Also store as selectedPhotosData for backwards compatibility
+            pack.selectedPhotosData = themePhotos.map { $0.photo }.encoded()
 
             try? context.save()
 
@@ -309,35 +311,80 @@ class MonthlyPackGenerator {
 
     // MARK: - Photo Selection
 
-    private func selectBestPhotos(from digests: [DailyDigest], maxCount: Int) -> [PhotoInfo] {
-        var allPhotos: [(photo: PhotoInfo, score: Double)] = []
+    /// Select one best photo for each top theme based on keywords from the day
+    private func selectThemePhotos(from digests: [DailyDigest], stats: MonthlyStats, maxThemes: Int) -> [ThemePhoto] {
+        // Get top themes sorted by frequency
+        let topThemes = stats.topThemes
+            .sorted { $0.value > $1.value }
+            .prefix(maxThemes)
+            .map { $0.key.lowercased() }
 
-        for digest in digests {
-            if let photosData = digest.photosData {
+        var themePhotos: [ThemePhoto] = []
+        var usedPhotoIds: Set<UUID> = []
+
+        // For each theme, find the best photo from a day with that keyword
+        for theme in topThemes {
+            var bestMatch: (photo: PhotoInfo, keywords: [String], score: Double)?
+
+            for digest in digests {
+                // Get keywords for this day
+                let keywords: [String]
+                if let keywordsData = digest.keywordsData {
+                    keywords = [String].decoded(from: keywordsData).map { $0.lowercased() }
+                } else {
+                    keywords = []
+                }
+
+                // Check if this day has the theme keyword
+                guard keywords.contains(theme) else { continue }
+
+                // Get photos from this day
+                guard let photosData = digest.photosData else { continue }
                 let photos = [PhotoInfo].decoded(from: photosData)
+
                 for photo in photos {
+                    // Skip already used photos
+                    guard !usedPhotoIds.contains(photo.id) else { continue }
+
+                    // Calculate score
                     var score = photo.qualityScore
 
-                    // Boost score for starred days
+                    // Boost for starred days
                     if digest.isStarred {
-                        score += 0.2
+                        score += 0.3
                     }
 
                     // Boost for photos with faces
                     if photo.hasFaces {
-                        score += 0.1
+                        score += 0.15
                     }
 
-                    allPhotos.append((photo, score))
+                    // Boost if photo's detected scenes match the theme
+                    if photo.detectedScenes.map({ $0.lowercased() }).contains(theme) {
+                        score += 0.2
+                    }
+
+                    // Update best match
+                    if bestMatch == nil || score > bestMatch!.score {
+                        bestMatch = (photo, keywords, score)
+                    }
                 }
+            }
+
+            // Add best matching photo for this theme
+            if let match = bestMatch {
+                let themePhoto = ThemePhoto(
+                    theme: theme.capitalized,
+                    photo: match.photo,
+                    dayKeywords: match.keywords.map { $0.capitalized },
+                    description: nil
+                )
+                themePhotos.append(themePhoto)
+                usedPhotoIds.insert(match.photo.id)
             }
         }
 
-        // Sort by score and take top photos
-        return allPhotos
-            .sorted { $0.score > $1.score }
-            .prefix(maxCount)
-            .map { $0.photo }
+        return themePhotos
     }
 
     // MARK: - Helper Methods

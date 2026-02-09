@@ -21,6 +21,7 @@
         <attribute name="pdfData" optional="YES" attributeType="Binary" allowsExternalBinaryDataStorage="YES"/>
         <attribute name="selectedPhotosData" optional="YES" attributeType="Binary"/>
         <attribute name="statsData" optional="YES" attributeType="Binary"/>
+        <attribute name="themePhotosData" optional="YES" attributeType="Binary"/>
         <attribute name="userEditedText" optional="YES" attributeType="String"/>
         <attribute name="year" optional="NO" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
     </entity>
