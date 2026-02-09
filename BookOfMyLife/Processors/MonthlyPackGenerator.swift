@@ -319,6 +319,18 @@ class MonthlyPackGenerator {
             .prefix(maxThemes)
             .map { $0.key.lowercased() }
 
+        print("[ThemePhotos] Top themes: \(topThemes)")
+
+        // Count total photos available
+        var totalPhotosAvailable = 0
+        for digest in digests {
+            if let photosData = digest.photosData {
+                let photos = [PhotoInfo].decoded(from: photosData)
+                totalPhotosAvailable += photos.count
+            }
+        }
+        print("[ThemePhotos] Total photos available in digests: \(totalPhotosAvailable)")
+
         var themePhotos: [ThemePhoto] = []
         var usedPhotoIds: Set<UUID> = []
 
@@ -335,8 +347,11 @@ class MonthlyPackGenerator {
                     keywords = []
                 }
 
-                // Check if this day has the theme keyword
-                guard keywords.contains(theme) else { continue }
+                // Check if this day has any keyword containing the theme (flexible matching)
+                let hasTheme = keywords.contains { keyword in
+                    keyword.contains(theme) || theme.contains(keyword)
+                }
+                guard hasTheme else { continue }
 
                 // Get photos from this day
                 guard let photosData = digest.photosData else { continue }
@@ -384,6 +399,44 @@ class MonthlyPackGenerator {
             }
         }
 
+        // Fallback: If no theme photos found but photos exist, select best photos without keyword matching
+        if themePhotos.isEmpty {
+            var allPhotos: [(photo: PhotoInfo, digest: DailyDigest, score: Double)] = []
+
+            for digest in digests {
+                guard let photosData = digest.photosData else { continue }
+                let photos = [PhotoInfo].decoded(from: photosData)
+
+                for photo in photos {
+                    var score = photo.qualityScore
+                    if digest.isStarred { score += 0.3 }
+                    if photo.hasFaces { score += 0.15 }
+                    allPhotos.append((photo, digest, score))
+                }
+            }
+
+            // Sort by score and take top photos
+            let topPhotos = allPhotos.sorted { $0.score > $1.score }.prefix(maxThemes)
+
+            for (index, item) in topPhotos.enumerated() {
+                let keywords: [String]
+                if let keywordsData = item.digest.keywordsData {
+                    keywords = [String].decoded(from: keywordsData)
+                } else {
+                    keywords = []
+                }
+
+                let themePhoto = ThemePhoto(
+                    theme: "Moment \(index + 1)",
+                    photo: item.photo,
+                    dayKeywords: keywords.prefix(4).map { $0.capitalized },
+                    description: nil
+                )
+                themePhotos.append(themePhoto)
+            }
+        }
+
+        print("[ThemePhotos] Final count: \(themePhotos.count)")
         return themePhotos
     }
 
