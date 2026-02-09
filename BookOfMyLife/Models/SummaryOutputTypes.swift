@@ -54,11 +54,23 @@ struct ExtractedTopic: Codable {
     /// Day numbers related to this topic
     var days: [Int]
 
-    /// Brief description for magazine layout
+    /// Narrative prose for magazine layout (2-3 sentences)
     var description: String
 }
 
 /// Wrapper for topics array (in case LLM wraps it)
 struct TopicsWrapper: Codable {
     var topics: [ExtractedTopic]
+}
+
+/// New Yorker style narrative structure
+struct MagazineNarrative: Codable {
+    /// Opening prose (1-2 sentences)
+    var opening: String
+
+    /// Story sections with photos
+    var sections: [ExtractedTopic]
+
+    /// Closing reflection (1-2 sentences)
+    var closing: String
 }

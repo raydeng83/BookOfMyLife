@@ -478,7 +478,7 @@ class FoundationModelsService {
     func extractTopics(
         dailyEntries: [DailyEntryContext],
         maxTopics: Int = 5
-    ) async throws -> [ExtractedTopic] {
+    ) async throws -> MagazineNarrative {
         let prompt = buildTopicExtractionPrompt(dailyEntries: dailyEntries, maxTopics: maxTopics)
 
         guard prompt.count < maxPromptLength else {
@@ -487,11 +487,11 @@ class FoundationModelsService {
 
         let response = try await callLLMWithRetry(prompt: prompt)
 
-        guard let topics = parseTopicsOutput(response) else {
+        guard let narrative = parseNarrativeOutput(response) else {
             throw FoundationModelsError.parsingFailed
         }
 
-        return topics
+        return narrative
     }
 
     private func buildTopicExtractionPrompt(dailyEntries: [DailyEntryContext], maxTopics: Int) -> String {
@@ -513,81 +513,84 @@ class FoundationModelsService {
         }.joined(separator: "\n")
 
         return """
-        Analyze these journal entries and identify the \(maxTopics) most significant topics or themes.
+        You are writing a personal magazine article about someone's month, like The New Yorker style.
 
-        ENTRIES:
+        JOURNAL ENTRIES:
         \(entriesText)
 
-        For each topic:
-        1. Give it a short, meaningful name (2-4 words, e.g., "Family Gathering", "Work Project", "Beach Trip")
-        2. List which days are related to this topic
-        3. Write a brief description (1 sentence) that could appear in a magazine layout
+        Create a flowing narrative with \(maxTopics) story sections. Each section centers on a meaningful moment or theme from the entries.
+
+        For each section:
+        1. "name": A poetic or evocative title (2-5 words)
+        2. "days": Which days this story draws from
+        3. "description": 2-3 sentences of narrative prose that tells the story of this moment. Write in second person ("you"). Be warm, reflective, and literary. This text will appear beside a photo.
+
+        Also include:
+        4. "opening": 1-2 sentences to open the article (sets the tone for the month)
+        5. "closing": 1-2 sentences to close (reflective ending)
 
         IMPORTANT:
-        - Only identify topics that have actual content in the entries
-        - Topics should be specific and meaningful, not generic like "daily life"
-        - Each topic should relate to at least one day with photos if possible
+        - Write like a personal essay, not a summary
+        - Each description should flow naturally and tell a mini-story
+        - Be specific to what actually happened based on the entries
+        - Don't make up events not in the entries
 
-        Respond with a JSON array:
-        [
-          {
-            "name": "Topic Name",
-            "days": [1, 5, 12],
-            "description": "Brief description for magazine layout."
-          }
-        ]
+        Respond with JSON:
+        {
+          "opening": "Opening prose...",
+          "sections": [
+            {"name": "Title", "days": [1, 2], "description": "Narrative prose..."}
+          ],
+          "closing": "Closing reflection..."
+        }
         """
     }
 
-    private func parseTopicsOutput(_ jsonString: String) -> [ExtractedTopic]? {
-        print("[Foundation Models] Raw topics response:\n\(jsonString)")
+    private func parseNarrativeOutput(_ jsonString: String) -> MagazineNarrative? {
+        print("[Foundation Models] Raw narrative response:\n\(jsonString)")
 
         guard let jsonData = extractJSON(from: jsonString) else {
-            print("[Foundation Models] Failed to extract JSON from topics response")
+            print("[Foundation Models] Failed to extract JSON from narrative response")
             return nil
         }
 
-        // Try parsing as array
+        // Try parsing as MagazineNarrative
         do {
-            let topics = try JSONDecoder().decode([ExtractedTopic].self, from: jsonData)
-            print("[Foundation Models] Parsed \(topics.count) topics as array")
-            return topics
+            let narrative = try JSONDecoder().decode(MagazineNarrative.self, from: jsonData)
+            print("[Foundation Models] Parsed narrative with \(narrative.sections.count) sections")
+            return narrative
         } catch {
-            print("[Foundation Models] Array parsing failed: \(error)")
+            print("[Foundation Models] MagazineNarrative parsing failed: \(error)")
         }
 
-        // Try parsing as wrapper object
-        do {
-            let wrapper = try JSONDecoder().decode(TopicsWrapper.self, from: jsonData)
-            print("[Foundation Models] Parsed \(wrapper.topics.count) topics from wrapper")
-            return wrapper.topics
-        } catch {
-            print("[Foundation Models] Wrapper parsing failed: \(error)")
-        }
+        // Try manual parsing
+        if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+            let opening = json["opening"] as? String ?? ""
+            let closing = json["closing"] as? String ?? ""
 
-        // Try manual parsing if structure is different
-        if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]] {
-            var topics: [ExtractedTopic] = []
-            for item in json {
-                if let name = item["name"] as? String,
-                   let description = item["description"] as? String {
-                    // Handle days as either [Int] or [String]
-                    var days: [Int] = []
-                    if let daysArray = item["days"] as? [Int] {
-                        days = daysArray
-                    } else if let daysArray = item["days"] as? [String] {
-                        days = daysArray.compactMap { Int($0) }
+            var sections: [ExtractedTopic] = []
+            if let sectionsArray = json["sections"] as? [[String: Any]] {
+                for item in sectionsArray {
+                    if let name = item["name"] as? String,
+                       let description = item["description"] as? String {
+                        var days: [Int] = []
+                        if let daysArray = item["days"] as? [Int] {
+                            days = daysArray
+                        } else if let daysArray = item["days"] as? [String] {
+                            days = daysArray.compactMap { Int($0) }
+                        }
+                        sections.append(ExtractedTopic(name: name, days: days, description: description))
                     }
-                    topics.append(ExtractedTopic(name: name, days: days, description: description))
                 }
             }
-            if !topics.isEmpty {
-                print("[Foundation Models] Manually parsed \(topics.count) topics")
-                return topics
+
+            if !sections.isEmpty {
+                print("[Foundation Models] Manually parsed narrative with \(sections.count) sections")
+                return MagazineNarrative(opening: opening, sections: sections, closing: closing)
             }
         }
 
-        print("[Foundation Models] Failed to parse topics - no valid format found")
+        print("[Foundation Models] Failed to parse narrative - no valid format found")
         return nil
     }
 

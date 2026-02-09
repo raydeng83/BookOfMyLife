@@ -36,11 +36,21 @@ class MonthlyPackGenerator {
         // Extract daily entry contexts for AI
         let dailyEntries = extractDailyEntryContexts(from: updatedDigests)
 
-        // Generate AI summary (try Foundation Models, fallback to template)
-        let (summary, method) = await generateSummary(from: updatedDigests, stats: stats, month: month, year: year)
+        // Extract narrative and photos using AI (try AI, fallback to keyword matching)
+        let (themePhotos, opening, closing) = await selectPhotosWithAI(from: updatedDigests, dailyEntries: dailyEntries, stats: stats, maxTopics: 5)
 
-        // Extract topics using AI and select photos (try AI, fallback to keyword matching)
-        let themePhotos = await selectPhotosWithAI(from: updatedDigests, dailyEntries: dailyEntries, stats: stats, maxTopics: 5)
+        // Format the narrative summary (opening + closing only, sections are in themePhotos)
+        let narrativeSummary: String
+        let method: String
+        if let opening = opening, let closing = closing {
+            narrativeSummary = "---OPENING---\n\(opening)\n---CLOSING---\n\(closing)"
+            method = "foundationModels"
+        } else {
+            // Fallback summary
+            let (fallbackSummary, _) = await generateSummary(from: updatedDigests, stats: stats, month: month, year: year)
+            narrativeSummary = fallbackSummary
+            method = "template"
+        }
 
         // Update Core Data on the context's thread
         return await context.perform {
@@ -49,7 +59,7 @@ class MonthlyPackGenerator {
             pack.year = Int32(year)
             pack.month = Int32(month)
             pack.statsData = stats.encoded()
-            pack.aiSummaryText = summary
+            pack.aiSummaryText = narrativeSummary
             pack.generationMethod = method
             pack.generatedAt = Date()
             pack.themePhotosData = themePhotos.encoded()
@@ -324,11 +334,11 @@ class MonthlyPackGenerator {
 
     // MARK: - AI-Powered Photo Selection
 
-    /// Select photos using AI-extracted topics
-    private func selectPhotosWithAI(from digests: [DailyDigest], dailyEntries: [DailyEntryContext], stats: MonthlyStats, maxTopics: Int) async -> [ThemePhoto] {
+    /// Select photos using AI-extracted narrative
+    private func selectPhotosWithAI(from digests: [DailyDigest], dailyEntries: [DailyEntryContext], stats: MonthlyStats, maxTopics: Int) async -> (photos: [ThemePhoto], opening: String?, closing: String?) {
         // Try AI topic extraction (iOS 26+)
         if #available(iOS 26.0, *) {
-            print("[ThemePhotos] iOS 26+ detected, trying AI topic extraction...")
+            print("[ThemePhotos] iOS 26+ detected, trying AI narrative extraction...")
             let service = FoundationModelsService()
 
             let isAvailable = await service.isAvailable()
@@ -336,22 +346,25 @@ class MonthlyPackGenerator {
 
             if isAvailable {
                 do {
-                    print("[ThemePhotos] Extracting topics using AI with \(dailyEntries.count) entries...")
-                    let topics = try await service.extractTopics(dailyEntries: dailyEntries, maxTopics: maxTopics)
-                    print("[ThemePhotos] AI extracted \(topics.count) topics:")
-                    for topic in topics {
-                        print("[ThemePhotos]   - \(topic.name): days=\(topic.days), desc=\(topic.description)")
+                    print("[ThemePhotos] Extracting narrative using AI with \(dailyEntries.count) entries...")
+                    let narrative = try await service.extractTopics(dailyEntries: dailyEntries, maxTopics: maxTopics)
+                    print("[ThemePhotos] AI generated narrative:")
+                    print("[ThemePhotos]   Opening: \(narrative.opening)")
+                    print("[ThemePhotos]   Sections: \(narrative.sections.count)")
+                    for section in narrative.sections {
+                        print("[ThemePhotos]   - \(section.name): \(section.description.prefix(50))...")
                     }
+                    print("[ThemePhotos]   Closing: \(narrative.closing)")
 
-                    let themePhotos = selectPhotosForTopics(topics: topics, digests: digests)
-                    print("[ThemePhotos] Selected \(themePhotos.count) photos for topics")
+                    let themePhotos = selectPhotosForTopics(topics: narrative.sections, digests: digests)
+                    print("[ThemePhotos] Selected \(themePhotos.count) photos for sections")
                     if !themePhotos.isEmpty {
-                        return themePhotos
+                        return (themePhotos, narrative.opening, narrative.closing)
                     } else {
-                        print("[ThemePhotos] No photos matched topics, falling back...")
+                        print("[ThemePhotos] No photos matched sections, falling back...")
                     }
                 } catch {
-                    print("[ThemePhotos] AI topic extraction failed: \(error). Falling back to keyword matching.")
+                    print("[ThemePhotos] AI narrative extraction failed: \(error). Falling back to keyword matching.")
                 }
             } else {
                 print("[ThemePhotos] Foundation Models not available, using fallback.")
@@ -362,7 +375,8 @@ class MonthlyPackGenerator {
 
         // Fallback to keyword-based selection
         print("[ThemePhotos] Using keyword-based fallback selection...")
-        return selectThemePhotos(from: digests, stats: stats, maxThemes: maxTopics)
+        let photos = selectThemePhotos(from: digests, stats: stats, maxThemes: maxTopics)
+        return (photos, nil, nil)
     }
 
     /// Select best photo for each AI-extracted topic

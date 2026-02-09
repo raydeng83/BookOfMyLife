@@ -36,10 +36,39 @@ struct MonthlyPackDetailView: View {
         return [ThemePhoto].decoded(from: data)
     }
 
-    /// Split summary into paragraphs for magazine-style layout
-    private var summaryParagraphs: [String] {
-        guard let summary = pack.userEditedText ?? pack.aiSummaryText else { return [] }
-        return summary.components(separatedBy: "\n\n").filter { !$0.isEmpty }
+    /// Parse opening text from narrative
+    private var openingText: String? {
+        guard let summary = pack.userEditedText ?? pack.aiSummaryText else { return nil }
+        if summary.contains("---OPENING---") {
+            let parts = summary.components(separatedBy: "---OPENING---")
+            if parts.count > 1 {
+                let afterOpening = parts[1]
+                if let endIndex = afterOpening.range(of: "---CLOSING---")?.lowerBound {
+                    return String(afterOpening[..<endIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                return afterOpening.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        // Fallback: use first paragraph
+        let paragraphs = summary.components(separatedBy: "\n\n").filter { !$0.isEmpty }
+        return paragraphs.first
+    }
+
+    /// Parse closing text from narrative
+    private var closingText: String? {
+        guard let summary = pack.userEditedText ?? pack.aiSummaryText else { return nil }
+        if summary.contains("---CLOSING---") {
+            let parts = summary.components(separatedBy: "---CLOSING---")
+            if parts.count > 1 {
+                return parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        // Fallback: use last paragraph if different from first
+        let paragraphs = summary.components(separatedBy: "\n\n").filter { !$0.isEmpty }
+        if paragraphs.count > 1 {
+            return paragraphs.last
+        }
+        return nil
     }
 
     var body: some View {
@@ -198,39 +227,25 @@ struct MonthlyPackDetailView: View {
         }
     }
 
-    // MARK: - Magazine Layout
+    // MARK: - New Yorker Style Magazine Layout
 
     @ViewBuilder
     private var magazineContent: some View {
-        let paragraphs = summaryParagraphs
-
-        // DEBUG: Show extracted topics
-        #if DEBUG
-        VStack(alignment: .leading, spacing: 4) {
-            Text("DEBUG: \(themePhotos.count) topics extracted")
-                .font(.caption2)
-                .foregroundColor(.orange)
-            ForEach(themePhotos, id: \.id) { tp in
-                Text("• \(tp.theme): \(tp.description ?? "NO DESC")")
-                    .font(.caption2)
-                    .foregroundColor(.gray)
-            }
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color.yellow.opacity(0.1))
-        #endif
-
-        // Opening paragraph
-        if let first = paragraphs.first {
-            Text(first)
-                .lineSpacing(4)
+        // Opening - sets the tone
+        if let opening = openingText {
+            Text(opening)
+                .font(.title3)
+                .fontWeight(.light)
+                .italic()
+                .lineSpacing(6)
+                .foregroundColor(.primary)
                 .padding(.horizontal)
+                .padding(.bottom, 8)
         }
 
-        // Topic photos with AI-generated descriptions
+        // Story sections - each photo with its narrative
         ForEach(Array(themePhotos.enumerated()), id: \.element.id) { index, themePhoto in
-            TopicPhotoRow(
+            StorySection(
                 themePhoto: themePhoto,
                 isPhotoLeft: index % 2 == 0,
                 onPhotoTap: {
@@ -240,11 +255,15 @@ struct MonthlyPackDetailView: View {
             )
         }
 
-        // Remaining paragraphs
-        ForEach(Array(paragraphs.dropFirst().enumerated()), id: \.offset) { _, paragraph in
-            Text(paragraph)
-                .lineSpacing(4)
+        // Closing reflection
+        if let closing = closingText {
+            Text(closing)
+                .font(.body)
+                .italic()
+                .lineSpacing(5)
+                .foregroundColor(.secondary)
                 .padding(.horizontal)
+                .padding(.top, 16)
         }
     }
 
@@ -329,25 +348,36 @@ struct StatItem: View {
     }
 }
 
-// MARK: - Topic Photo Row (AI-extracted topic with description)
+// MARK: - Story Section (New Yorker style)
 
-struct TopicPhotoRow: View {
+struct StorySection: View {
     let themePhoto: ThemePhoto
     let isPhotoLeft: Bool
     let onPhotoTap: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
-            if isPhotoLeft {
-                photoView
-                textView
-            } else {
-                textView
-                photoView
+        VStack(alignment: .leading, spacing: 12) {
+            // Section title
+            Text(themePhoto.theme.uppercased())
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.accentColor)
+                .kerning(1.5)
+                .padding(.horizontal)
+
+            // Photo and narrative side by side
+            HStack(alignment: .top, spacing: 16) {
+                if isPhotoLeft {
+                    photoView
+                    narrativeView
+                } else {
+                    narrativeView
+                    photoView
+                }
             }
+            .padding(.horizontal)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 12)
+        .padding(.vertical, 16)
     }
 
     private var photoView: some View {
@@ -356,34 +386,24 @@ struct TopicPhotoRow: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 130, height: 170)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                    .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    .frame(width: 140, height: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
                     .onTapGesture(perform: onPhotoTap)
             } else {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.secondary.opacity(0.2))
-                    .frame(width: 130, height: 170)
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.secondary.opacity(0.15))
+                    .frame(width: 140, height: 180)
             }
         }
     }
 
-    private var textView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Topic title
-            Text(themePhoto.theme)
-                .font(.headline)
-                .foregroundColor(.primary)
-
-            // Topic description (AI-generated) or fallback
-            Text(themePhoto.description ?? "A meaningful moment from \(themePhoto.dayKeywords.joined(separator: ", "))")
-                .font(.body)
-                .lineSpacing(4)
-                .foregroundColor(.secondary)
-
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
+    private var narrativeView: some View {
+        Text(themePhoto.description ?? "")
+            .font(.body)
+            .lineSpacing(6)
+            .foregroundColor(.primary.opacity(0.85))
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -223,20 +223,18 @@ class PDFGenerator {
         drawLine(at: currentY, width: contentWidth)
         currentY += 25
 
-        // Draw opening paragraph
-        if let firstParagraph = paragraphs.first {
-            let estimatedHeight = estimateTextHeight(firstParagraph, width: contentWidth)
-            if currentY + estimatedHeight > pageRect.height - margin - 50 {
-                context.beginPage()
-                currentY = margin
-            }
-            currentY = drawParagraph(firstParagraph, at: currentY, width: contentWidth)
-            currentY += 20
+        // Parse opening and closing from summary
+        let (opening, closing) = parseNarrativeParts(from: paragraphs)
+
+        // Draw opening (italic, sets the tone)
+        if let opening = opening, !opening.isEmpty {
+            currentY = drawOpeningText(opening, at: currentY, width: contentWidth)
+            currentY += 25
         }
 
-        // Draw topic photos with descriptions
+        // Draw story sections (photo + narrative)
         for (index, themePhoto) in themePhotos.enumerated() {
-            let rowHeight = estimateTopicRowHeight(themePhoto, width: contentWidth)
+            let rowHeight = estimateStorySectionHeight(themePhoto, width: contentWidth)
 
             if currentY + rowHeight > pageRect.height - margin - 50 {
                 context.beginPage()
@@ -244,24 +242,22 @@ class PDFGenerator {
             }
 
             let isPhotoLeft = index % 2 == 0
-            currentY = drawTopicPhotoRow(
+            currentY = drawStorySection(
                 themePhoto,
                 at: currentY,
                 width: contentWidth,
                 isPhotoLeft: isPhotoLeft
             )
-            currentY += 20
+            currentY += 25
         }
 
-        // Draw remaining paragraphs
-        for paragraph in paragraphs.dropFirst() {
-            let estimatedHeight = estimateTextHeight(paragraph, width: contentWidth)
-            if currentY + estimatedHeight > pageRect.height - margin - 50 {
+        // Draw closing reflection
+        if let closing = closing, !closing.isEmpty {
+            if currentY + 60 > pageRect.height - margin {
                 context.beginPage()
                 currentY = margin
             }
-            currentY = drawParagraph(paragraph, at: currentY, width: contentWidth)
-            currentY += 15
+            currentY = drawClosingText(closing, at: currentY, width: contentWidth)
         }
 
         // Draw stats at the end
@@ -279,11 +275,90 @@ class PDFGenerator {
         }
     }
 
-    /// Draw a topic photo row with title and description
-    private func drawTopicPhotoRow(_ themePhoto: ThemePhoto, at y: CGFloat, width: CGFloat, isPhotoLeft: Bool) -> CGFloat {
-        let photoWidth: CGFloat = 130
-        let photoHeight: CGFloat = 160
-        let spacing: CGFloat = 15
+    /// Parse opening and closing from narrative format
+    private func parseNarrativeParts(from paragraphs: [String]) -> (opening: String?, closing: String?) {
+        let fullText = paragraphs.joined(separator: "\n\n")
+
+        var opening: String?
+        var closing: String?
+
+        if fullText.contains("---OPENING---") {
+            let parts = fullText.components(separatedBy: "---OPENING---")
+            if parts.count > 1 {
+                let afterOpening = parts[1]
+                if let endIndex = afterOpening.range(of: "---CLOSING---")?.lowerBound {
+                    opening = String(afterOpening[..<endIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+        } else if let first = paragraphs.first {
+            opening = first
+        }
+
+        if fullText.contains("---CLOSING---") {
+            let parts = fullText.components(separatedBy: "---CLOSING---")
+            if parts.count > 1 {
+                closing = parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        } else if paragraphs.count > 1 {
+            closing = paragraphs.last
+        }
+
+        return (opening, closing)
+    }
+
+    /// Draw opening text (italic, sets tone)
+    private func drawOpeningText(_ text: String, at y: CGFloat, width: CGFloat) -> CGFloat {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 5
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.italicSystemFont(ofSize: 14),
+            .foregroundColor: UIColor.darkGray,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        let textHeight = estimateTextHeight(text, width: width)
+        let textRect = CGRect(x: margin, y: y, width: width, height: textHeight + 10)
+        text.draw(in: textRect, withAttributes: attributes)
+
+        return y + textHeight + 5
+    }
+
+    /// Draw closing text (italic reflection)
+    private func drawClosingText(_ text: String, at y: CGFloat, width: CGFloat) -> CGFloat {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 4
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.italicSystemFont(ofSize: 12),
+            .foregroundColor: UIColor.gray,
+            .paragraphStyle: paragraphStyle
+        ]
+
+        let textHeight = estimateTextHeight(text, width: width)
+        let textRect = CGRect(x: margin, y: y, width: width, height: textHeight + 10)
+        text.draw(in: textRect, withAttributes: attributes)
+
+        return y + textHeight + 5
+    }
+
+    /// Draw a story section with title, photo, and narrative
+    private func drawStorySection(_ themePhoto: ThemePhoto, at y: CGFloat, width: CGFloat, isPhotoLeft: Bool) -> CGFloat {
+        var currentY = y
+
+        // Draw section title (uppercase, small)
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
+            .foregroundColor: UIColor.systemBlue,
+            .kern: 1.5
+        ]
+        themePhoto.theme.uppercased().draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
+        currentY += 18
+
+        // Photo and narrative layout
+        let photoWidth: CGFloat = 140
+        let photoHeight: CGFloat = 175
+        let spacing: CGFloat = 16
         let textWidth = width - photoWidth - spacing
 
         let photoX: CGFloat
@@ -299,50 +374,35 @@ class PDFGenerator {
 
         // Draw photo
         if let image = themePhoto.photo.loadImage() {
-            let photoRect = CGRect(x: photoX, y: y, width: photoWidth, height: photoHeight)
+            let photoRect = CGRect(x: photoX, y: currentY, width: photoWidth, height: photoHeight)
 
             UIGraphicsGetCurrentContext()?.saveGState()
-            let clipPath = UIBezierPath(roundedRect: photoRect, cornerRadius: 8)
+            let clipPath = UIBezierPath(roundedRect: photoRect, cornerRadius: 6)
             clipPath.addClip()
             image.draw(in: photoRect)
             UIGraphicsGetCurrentContext()?.restoreGState()
-
-            UIColor.lightGray.withAlphaComponent(0.3).setStroke()
-            clipPath.lineWidth = 0.5
-            clipPath.stroke()
         }
 
-        var textY = y
-
-        // Draw topic title
-        let titleAttributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: 14, weight: .semibold),
-            .foregroundColor: UIColor.black
-        ]
-        let titleRect = CGRect(x: textX, y: textY, width: textWidth, height: 22)
-        themePhoto.theme.draw(in: titleRect, withAttributes: titleAttributes)
-        textY += 26
-
-        // Draw description
+        // Draw narrative text
         if let description = themePhoto.description, !description.isEmpty {
             let paragraphStyle = NSMutableParagraphStyle()
-            paragraphStyle.lineSpacing = 4
+            paragraphStyle.lineSpacing = 5
 
-            let descAttributes: [NSAttributedString.Key: Any] = [
+            let textAttributes: [NSAttributedString.Key: Any] = [
                 .font: UIFont.systemFont(ofSize: 12),
                 .foregroundColor: UIColor.darkGray,
                 .paragraphStyle: paragraphStyle
             ]
 
-            let descRect = CGRect(x: textX, y: textY, width: textWidth, height: photoHeight - 30)
-            description.draw(in: descRect, withAttributes: descAttributes)
+            let textRect = CGRect(x: textX, y: currentY, width: textWidth, height: photoHeight)
+            description.draw(in: textRect, withAttributes: textAttributes)
         }
 
-        return y + photoHeight + 10
+        return currentY + photoHeight
     }
 
-    private func estimateTopicRowHeight(_ themePhoto: ThemePhoto, width: CGFloat) -> CGFloat {
-        return 170 // Fixed height for topic rows
+    private func estimateStorySectionHeight(_ themePhoto: ThemePhoto, width: CGFloat) -> CGFloat {
+        return 200 // Title + photo height
     }
 
     // MARK: - Drawing Helpers
