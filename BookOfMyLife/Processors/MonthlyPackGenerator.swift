@@ -423,7 +423,7 @@ class MonthlyPackGenerator {
                 let themePhoto = ThemePhoto(
                     theme: topic.name,
                     photo: match.photo,
-                    dayKeywords: topic.days.map { "Day \($0)" },
+                    dayKeywords: [],  // No longer storing day references
                     description: topic.description
                 )
                 themePhotos.append(themePhoto)
@@ -546,9 +546,8 @@ class MonthlyPackGenerator {
             // Sort by score and take top photos
             let topPhotos = allPhotos.sorted { $0.score > $1.score }.prefix(maxThemes)
 
-            let calendar = Calendar.current
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "MMMM d"
+            // Vague time references for fallback
+            let timeRefs = ["One quiet morning", "On a memorable afternoon", "During a peaceful moment", "On a special occasion", "In a cherished moment"]
 
             for (index, item) in topPhotos.enumerated() {
                 let keywords: [String]
@@ -558,23 +557,33 @@ class MonthlyPackGenerator {
                     keywords = []
                 }
 
-                // Build description from available data
-                var descParts: [String] = []
-                if let date = item.digest.date {
-                    descParts.append("Captured on \(dateFormatter.string(from: date)).")
-                }
+                // Build description with vague time reference
+                var description: String
+                let timeRef = timeRefs[index % timeRefs.count]
+
                 if !keywords.isEmpty {
-                    descParts.append("Keywords: \(keywords.prefix(3).joined(separator: ", ")).")
+                    description = "\(timeRef), you captured a moment featuring \(keywords.prefix(2).joined(separator: " and "))."
+                } else if !item.photo.detectedScenes.isEmpty {
+                    let scenes = item.photo.detectedScenes.prefix(2).joined(separator: " and ")
+                    description = "\(timeRef), you found yourself surrounded by \(scenes)."
+                } else {
+                    description = "\(timeRef), you paused to capture this memory."
                 }
-                if !item.photo.detectedScenes.isEmpty {
-                    descParts.append("Scene: \(item.photo.detectedScenes.prefix(3).joined(separator: ", ")).")
+
+                // Generate evocative title from keywords or scenes
+                let title: String
+                if let firstKeyword = keywords.first {
+                    title = firstKeyword.capitalized
+                } else if let firstScene = item.photo.detectedScenes.first {
+                    title = firstScene.capitalized
+                } else {
+                    title = "A Quiet Moment"
                 }
-                let description = descParts.isEmpty ? nil : descParts.joined(separator: " ")
 
                 let themePhoto = ThemePhoto(
-                    theme: "Moment \(index + 1)",
+                    theme: title,
                     photo: item.photo,
-                    dayKeywords: keywords.prefix(4).map { $0.capitalized },
+                    dayKeywords: [],
                     description: description
                 )
                 themePhotos.append(themePhoto)

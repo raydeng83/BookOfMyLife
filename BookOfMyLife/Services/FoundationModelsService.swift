@@ -522,24 +522,27 @@ class FoundationModelsService {
 
         For each section:
         1. "name": A poetic or evocative title (2-5 words)
-        2. "days": Which days this story draws from
-        3. "description": 2-3 sentences of narrative prose that tells the story of this moment. Write in second person ("you"). Be warm, reflective, and literary. This text will appear beside a photo.
+        2. "days": Which days this story draws from (for photo matching only)
+        3. "description": 2-3 sentences of narrative prose that tells the story of this moment. Write in second person ("you"). Be warm, reflective, and literary.
 
         Also include:
         4. "opening": 1-2 sentences to open the article (sets the tone for the month)
         5. "closing": 1-2 sentences to close (reflective ending)
 
-        IMPORTANT:
+        CRITICAL WRITING RULES:
+        - NEVER mention specific days, dates, or "Day X" in any text
+        - Use vague time references like "one morning", "later that week", "as the month progressed", "on a quiet afternoon"
         - Write like a personal essay, not a summary
         - Each description should flow naturally and tell a mini-story
         - Be specific to what actually happened based on the entries
         - Don't make up events not in the entries
+        - NO emojis
 
         Respond with JSON:
         {
           "opening": "Opening prose...",
           "sections": [
-            {"name": "Title", "days": [1, 2], "description": "Narrative prose..."}
+            {"name": "Title", "days": [1, 2], "description": "Narrative prose with vague time references..."}
           ],
           "closing": "Closing reflection..."
         }
