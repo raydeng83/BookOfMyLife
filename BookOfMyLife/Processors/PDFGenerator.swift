@@ -306,40 +306,64 @@ class PDFGenerator {
         return (opening, closing)
     }
 
-    /// Draw opening text (italic, sets tone)
+    /// Draw opening section (same style as photo text)
     private func drawOpeningText(_ text: String, at y: CGFloat, width: CGFloat) -> CGFloat {
+        var currentY = y
+
+        // Section title
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
+            .foregroundColor: UIColor.systemBlue,
+            .kern: 1.5
+        ]
+        "THE MONTH BEGINS".draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
+        currentY += 18
+
+        // Body text
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = 5
 
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.italicSystemFont(ofSize: 14),
+            .font: UIFont.systemFont(ofSize: 12),
             .foregroundColor: UIColor.darkGray,
             .paragraphStyle: paragraphStyle
         ]
 
         let textHeight = estimateTextHeight(text, width: width)
-        let textRect = CGRect(x: margin, y: y, width: width, height: textHeight + 10)
+        let textRect = CGRect(x: margin, y: currentY, width: width, height: textHeight + 10)
         text.draw(in: textRect, withAttributes: attributes)
 
-        return y + textHeight + 5
+        return currentY + textHeight + 10
     }
 
-    /// Draw closing text (italic reflection)
+    /// Draw closing section (same style as photo text)
     private func drawClosingText(_ text: String, at y: CGFloat, width: CGFloat) -> CGFloat {
+        var currentY = y
+
+        // Section title
+        let titleAttributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: 10, weight: .bold),
+            .foregroundColor: UIColor.systemBlue,
+            .kern: 1.5
+        ]
+        "LOOKING BACK".draw(at: CGPoint(x: margin, y: currentY), withAttributes: titleAttributes)
+        currentY += 18
+
+        // Body text
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 4
+        paragraphStyle.lineSpacing = 5
 
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: UIFont.italicSystemFont(ofSize: 12),
-            .foregroundColor: UIColor.gray,
+            .font: UIFont.systemFont(ofSize: 12),
+            .foregroundColor: UIColor.darkGray,
             .paragraphStyle: paragraphStyle
         ]
 
         let textHeight = estimateTextHeight(text, width: width)
-        let textRect = CGRect(x: margin, y: y, width: width, height: textHeight + 10)
+        let textRect = CGRect(x: margin, y: currentY, width: width, height: textHeight + 10)
         text.draw(in: textRect, withAttributes: attributes)
 
-        return y + textHeight + 5
+        return currentY + textHeight + 10
     }
 
     /// Draw a story section with title, photo, and narrative

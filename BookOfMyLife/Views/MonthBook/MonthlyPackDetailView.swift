@@ -231,16 +231,22 @@ struct MonthlyPackDetailView: View {
 
     @ViewBuilder
     private var magazineContent: some View {
-        // Opening - sets the tone
+        // Opening - intro section
         if let opening = openingText {
-            Text(opening)
-                .font(.title3)
-                .fontWeight(.light)
-                .italic()
-                .lineSpacing(6)
-                .foregroundColor(.primary)
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("THE MONTH BEGINS")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.accentColor)
+                    .kerning(1.5)
+
+                Text(opening)
+                    .font(.body)
+                    .lineSpacing(6)
+                    .foregroundColor(.primary.opacity(0.85))
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 12)
         }
 
         // Story sections - each photo with its narrative
@@ -255,15 +261,22 @@ struct MonthlyPackDetailView: View {
             )
         }
 
-        // Closing reflection
+        // Closing - ending section
         if let closing = closingText {
-            Text(closing)
-                .font(.body)
-                .italic()
-                .lineSpacing(5)
-                .foregroundColor(.secondary)
-                .padding(.horizontal)
-                .padding(.top, 16)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("LOOKING BACK")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.accentColor)
+                    .kerning(1.5)
+
+                Text(closing)
+                    .font(.body)
+                    .lineSpacing(6)
+                    .foregroundColor(.primary.opacity(0.85))
+            }
+            .padding(.horizontal)
+            .padding(.top, 16)
         }
     }
 
