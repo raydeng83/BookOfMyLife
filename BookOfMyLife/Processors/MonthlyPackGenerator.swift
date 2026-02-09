@@ -399,7 +399,9 @@ class MonthlyPackGenerator {
                 )
                 themePhotos.append(themePhoto)
                 usedPhotoIds.insert(match.photo.id)
-                print("[ThemePhotos] Selected photo for topic '\(topic.name)' from days \(topic.days)")
+                print("[ThemePhotos] ✓ Topic: '\(topic.name)' | Days: \(topic.days) | Description: \(topic.description)")
+            } else {
+                print("[ThemePhotos] ✗ Topic: '\(topic.name)' | Days: \(topic.days) - NO PHOTO FOUND")
             }
         }
 

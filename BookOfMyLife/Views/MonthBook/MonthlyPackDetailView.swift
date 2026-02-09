@@ -204,6 +204,23 @@ struct MonthlyPackDetailView: View {
     private var magazineContent: some View {
         let paragraphs = summaryParagraphs
 
+        // DEBUG: Show extracted topics
+        #if DEBUG
+        VStack(alignment: .leading, spacing: 4) {
+            Text("DEBUG: \(themePhotos.count) topics extracted")
+                .font(.caption2)
+                .foregroundColor(.orange)
+            ForEach(themePhotos, id: \.id) { tp in
+                Text("• \(tp.theme): \(tp.description ?? "NO DESC")")
+                    .font(.caption2)
+                    .foregroundColor(.gray)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.yellow.opacity(0.1))
+        #endif
+
         // Opening paragraph
         if let first = paragraphs.first {
             Text(first)
@@ -358,17 +375,15 @@ struct TopicPhotoRow: View {
                 .font(.headline)
                 .foregroundColor(.primary)
 
-            // Topic description (AI-generated)
-            if let description = themePhoto.description, !description.isEmpty {
-                Text(description)
-                    .font(.body)
-                    .lineSpacing(4)
-                    .foregroundColor(.secondary)
-            }
+            // Topic description (AI-generated) or fallback
+            Text(themePhoto.description ?? "A meaningful moment from \(themePhoto.dayKeywords.joined(separator: ", "))")
+                .font(.body)
+                .lineSpacing(4)
+                .foregroundColor(.secondary)
 
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
     }
 }
 
