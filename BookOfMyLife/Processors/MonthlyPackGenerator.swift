@@ -328,25 +328,40 @@ class MonthlyPackGenerator {
     private func selectPhotosWithAI(from digests: [DailyDigest], dailyEntries: [DailyEntryContext], stats: MonthlyStats, maxTopics: Int) async -> [ThemePhoto] {
         // Try AI topic extraction (iOS 26+)
         if #available(iOS 26.0, *) {
+            print("[ThemePhotos] iOS 26+ detected, trying AI topic extraction...")
             let service = FoundationModelsService()
 
-            if await service.isAvailable() {
+            let isAvailable = await service.isAvailable()
+            print("[ThemePhotos] Foundation Models available: \(isAvailable)")
+
+            if isAvailable {
                 do {
-                    print("[ThemePhotos] Extracting topics using AI...")
+                    print("[ThemePhotos] Extracting topics using AI with \(dailyEntries.count) entries...")
                     let topics = try await service.extractTopics(dailyEntries: dailyEntries, maxTopics: maxTopics)
-                    print("[ThemePhotos] AI extracted \(topics.count) topics: \(topics.map { $0.name })")
+                    print("[ThemePhotos] AI extracted \(topics.count) topics:")
+                    for topic in topics {
+                        print("[ThemePhotos]   - \(topic.name): days=\(topic.days), desc=\(topic.description)")
+                    }
 
                     let themePhotos = selectPhotosForTopics(topics: topics, digests: digests)
+                    print("[ThemePhotos] Selected \(themePhotos.count) photos for topics")
                     if !themePhotos.isEmpty {
                         return themePhotos
+                    } else {
+                        print("[ThemePhotos] No photos matched topics, falling back...")
                     }
                 } catch {
                     print("[ThemePhotos] AI topic extraction failed: \(error). Falling back to keyword matching.")
                 }
+            } else {
+                print("[ThemePhotos] Foundation Models not available, using fallback.")
             }
+        } else {
+            print("[ThemePhotos] iOS < 26, using keyword fallback.")
         }
 
         // Fallback to keyword-based selection
+        print("[ThemePhotos] Using keyword-based fallback selection...")
         return selectThemePhotos(from: digests, stats: stats, maxThemes: maxTopics)
     }
 
@@ -517,6 +532,10 @@ class MonthlyPackGenerator {
             // Sort by score and take top photos
             let topPhotos = allPhotos.sorted { $0.score > $1.score }.prefix(maxThemes)
 
+            let calendar = Calendar.current
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "MMMM d"
+
             for (index, item) in topPhotos.enumerated() {
                 let keywords: [String]
                 if let keywordsData = item.digest.keywordsData {
@@ -525,13 +544,27 @@ class MonthlyPackGenerator {
                     keywords = []
                 }
 
+                // Build description from available data
+                var descParts: [String] = []
+                if let date = item.digest.date {
+                    descParts.append("Captured on \(dateFormatter.string(from: date)).")
+                }
+                if !keywords.isEmpty {
+                    descParts.append("Keywords: \(keywords.prefix(3).joined(separator: ", ")).")
+                }
+                if !item.photo.detectedScenes.isEmpty {
+                    descParts.append("Scene: \(item.photo.detectedScenes.prefix(3).joined(separator: ", ")).")
+                }
+                let description = descParts.isEmpty ? nil : descParts.joined(separator: " ")
+
                 let themePhoto = ThemePhoto(
                     theme: "Moment \(index + 1)",
                     photo: item.photo,
                     dayKeywords: keywords.prefix(4).map { $0.capitalized },
-                    description: nil
+                    description: description
                 )
                 themePhotos.append(themePhoto)
+                print("[ThemePhotos] Fallback: Moment \(index + 1) | Desc: \(description ?? "none")")
             }
         }
 
