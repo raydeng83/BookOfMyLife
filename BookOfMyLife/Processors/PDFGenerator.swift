@@ -273,12 +273,12 @@ class PDFGenerator {
         }
     }
 
-    /// Distribute photos to paragraphs based on keyword matching
+    /// Match photos to paragraphs based on keyword matching (only matched photos shown)
     private func distributePhotos(paragraphs: [String], photos: [ThemePhoto]) -> [Int: Int] {
         var result: [Int: Int] = [:]
         var usedPhotos: Set<Int> = []
 
-        // Match photos to paragraphs by theme/keyword
+        // Only match photos to paragraphs by theme/keyword - no forced distribution
         for (pIndex, paragraph) in paragraphs.enumerated() {
             let paragraphLower = paragraph.lowercased()
 
@@ -287,7 +287,8 @@ class PDFGenerator {
 
                 let themeLower = themePhoto.theme.lowercased()
                 let keywordsMatch = themePhoto.dayKeywords.contains { keyword in
-                    paragraphLower.contains(keyword.lowercased())
+                    // Only match keywords with 4+ characters to avoid false positives
+                    keyword.count >= 4 && paragraphLower.contains(keyword.lowercased())
                 }
 
                 if paragraphLower.contains(themeLower) || keywordsMatch {
@@ -295,15 +296,6 @@ class PDFGenerator {
                     usedPhotos.insert(phIndex)
                     break
                 }
-            }
-        }
-
-        // Distribute remaining photos evenly
-        let remainingPhotos = photos.indices.filter { !usedPhotos.contains($0) }
-        let availableParagraphs = paragraphs.indices.filter { result[$0] == nil }
-        for (i, photoIndex) in remainingPhotos.enumerated() {
-            if i < availableParagraphs.count {
-                result[availableParagraphs[i]] = photoIndex
             }
         }
 

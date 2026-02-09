@@ -227,12 +227,12 @@ struct MonthlyPackDetailView: View {
         }
     }
 
-    /// Distribute photos across paragraphs based on keyword matching
+    /// Match photos to paragraphs based on keyword matching (only matched photos shown)
     private func distributePhotos(paragraphs: [String], photos: [ThemePhoto]) -> [Int: Int] {
         var result: [Int: Int] = [:]  // paragraph index -> photo index
         var usedPhotos: Set<Int> = []
 
-        // First pass: match photos to paragraphs by theme/keyword
+        // Only match photos to paragraphs by theme/keyword - no forced distribution
         for (pIndex, paragraph) in paragraphs.enumerated() {
             let paragraphLower = paragraph.lowercased()
 
@@ -242,24 +242,14 @@ struct MonthlyPackDetailView: View {
                 // Check if paragraph contains the theme or any keywords
                 let themeLower = themePhoto.theme.lowercased()
                 let keywordsMatch = themePhoto.dayKeywords.contains { keyword in
-                    paragraphLower.contains(keyword.lowercased())
+                    // Only match keywords with 4+ characters to avoid false positives
+                    keyword.count >= 4 && paragraphLower.contains(keyword.lowercased())
                 }
 
                 if paragraphLower.contains(themeLower) || keywordsMatch {
                     result[pIndex] = phIndex
                     usedPhotos.insert(phIndex)
                     break
-                }
-            }
-        }
-
-        // Second pass: distribute remaining photos evenly if any left
-        let remainingPhotos = photos.indices.filter { !usedPhotos.contains($0) }
-        if !remainingPhotos.isEmpty && paragraphs.count > 0 {
-            let availableParagraphs = paragraphs.indices.filter { result[$0] == nil }
-            for (i, photoIndex) in remainingPhotos.enumerated() {
-                if i < availableParagraphs.count {
-                    result[availableParagraphs[i]] = photoIndex
                 }
             }
         }
