@@ -532,6 +532,7 @@ class FoundationModelsService {
         CRITICAL WRITING RULES:
         - NEVER mention specific days, dates, or "Day X" in any text
         - Use vague time references like "one morning", "later that week", "as the month progressed", "on a quiet afternoon"
+        - Each section should reference DIFFERENT days - do not assign the same day to multiple sections
         - Write like a personal essay, not a summary
         - Each description should flow naturally and tell a mini-story
         - Be specific to what actually happened based on the entries

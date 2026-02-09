@@ -379,10 +379,11 @@ class MonthlyPackGenerator {
         return (photos, nil, nil)
     }
 
-    /// Select best photo for each AI-extracted topic
+    /// Select best photo for each AI-extracted topic (one photo per day max)
     private func selectPhotosForTopics(topics: [ExtractedTopic], digests: [DailyDigest]) -> [ThemePhoto] {
         var themePhotos: [ThemePhoto] = []
         var usedPhotoIds: Set<UUID> = []
+        var usedDays: Set<Int> = []  // Track used days to avoid multiple photos from same day
 
         // Create a map of day number to digest
         let calendar = Calendar.current
@@ -395,10 +396,12 @@ class MonthlyPackGenerator {
         }
 
         for topic in topics {
-            var bestMatch: (photo: PhotoInfo, score: Double)?
+            var bestMatch: (photo: PhotoInfo, day: Int, score: Double)?
 
             // Look at digests for the days associated with this topic
             for dayNum in topic.days {
+                // Skip days already used by other topics
+                guard !usedDays.contains(dayNum) else { continue }
                 guard let digest = dayToDigest[dayNum] else { continue }
                 guard let photosData = digest.photosData else { continue }
 
@@ -413,7 +416,7 @@ class MonthlyPackGenerator {
                     if photo.hasFaces { score += 0.2 }
 
                     if bestMatch == nil || score > bestMatch!.score {
-                        bestMatch = (photo, score)
+                        bestMatch = (photo, dayNum, score)
                     }
                 }
             }
@@ -423,14 +426,15 @@ class MonthlyPackGenerator {
                 let themePhoto = ThemePhoto(
                     theme: topic.name,
                     photo: match.photo,
-                    dayKeywords: [],  // No longer storing day references
+                    dayKeywords: [],
                     description: topic.description
                 )
                 themePhotos.append(themePhoto)
                 usedPhotoIds.insert(match.photo.id)
-                print("[ThemePhotos] ✓ Topic: '\(topic.name)' | Days: \(topic.days) | Description: \(topic.description)")
+                usedDays.insert(match.day)  // Mark day as used
+                print("[ThemePhotos] ✓ Topic: '\(topic.name)' | Day: \(match.day) | Description: \(topic.description)")
             } else {
-                print("[ThemePhotos] ✗ Topic: '\(topic.name)' | Days: \(topic.days) - NO PHOTO FOUND")
+                print("[ThemePhotos] ✗ Topic: '\(topic.name)' | Days: \(topic.days) - NO PHOTO FOUND (days may be used)")
             }
         }
 
