@@ -474,14 +474,17 @@ class FoundationModelsService {
 
     // MARK: - Topic Extraction
 
-    /// Extract meaningful topics from daily entries using AI
-    func extractTopics(
-        dailyEntries: [DailyEntryContext],
-        maxTopics: Int = 5
+    /// Generate a caption for each daily entry that has photos
+    func generateDayCaptions(
+        dailyEntries: [DailyEntryContext]
     ) async throws -> MagazineNarrative {
-        let prompt = buildTopicExtractionPrompt(dailyEntries: dailyEntries, maxTopics: maxTopics)
-        print("[Foundation Models] Topic extraction prompt length: \(prompt.count)/\(maxPromptLength) chars")
-        print("[Foundation Models] Prompt entries:\n\(dailyEntries.map { "  Day \(String(format: "%2d", $0.dayOfMonth)): mood=\($0.mood ?? "nil"), text=\($0.journalText != nil ? "yes(\($0.journalText!.count)c)" : "no"), keywords=\($0.keywords.count), photos=\($0.photoDescriptions.count)" }.joined(separator: "\n"))")
+        // Filter to entries with photos only
+        let entriesWithPhotos = dailyEntries.filter { !$0.photoDescriptions.isEmpty }
+        print("[Foundation Models] Generating captions for \(entriesWithPhotos.count) days with photos (out of \(dailyEntries.count) total)")
+
+        let prompt = buildDayCaptionsPrompt(entries: entriesWithPhotos)
+        print("[Foundation Models] Caption prompt length: \(prompt.count)/\(maxPromptLength) chars")
+        print("[Foundation Models] Prompt entries:\n\(entriesWithPhotos.map { "  Day \(String(format: "%2d", $0.dayOfMonth)): mood=\($0.mood ?? "nil"), text=\($0.journalText != nil ? "yes(\($0.journalText!.count)c)" : "no"), keywords=\($0.keywords.count), photos=\($0.photoDescriptions.count)" }.joined(separator: "\n"))")
 
         guard prompt.count < maxPromptLength else {
             print("[Foundation Models] Prompt too long (\(prompt.count) > \(maxPromptLength)), aborting")
@@ -505,9 +508,9 @@ class FoundationModelsService {
         return narrative
     }
 
-    private func buildTopicExtractionPrompt(dailyEntries: [DailyEntryContext], maxTopics: Int) -> String {
-        // Format entries with day numbers
-        let entriesText = dailyEntries.map { entry in
+    private func buildDayCaptionsPrompt(entries: [DailyEntryContext]) -> String {
+        // Format each entry with its day number
+        let entriesText = entries.map { entry in
             var parts: [String] = ["Day \(entry.dayOfMonth):"]
             if let mood = entry.mood { parts.append("Mood: \(mood)") }
             if let text = entry.journalText, !text.isEmpty {
@@ -523,38 +526,41 @@ class FoundationModelsService {
             return parts.joined(separator: " | ")
         }.joined(separator: "\n")
 
+        // List the exact day numbers we need captions for
+        let dayNumbers = entries.map { String($0.dayOfMonth) }.joined(separator: ", ")
+
         return """
-        You are writing short captions for a personal photo journal about someone's month.
+        You are writing short photo captions for a personal journal.
 
         JOURNAL ENTRIES:
         \(entriesText)
 
-        Create \(maxTopics) story sections. Each section pairs with a photo from a specific day.
+        Write exactly ONE caption for EACH of the following days: \(dayNumbers).
+        You MUST produce one section per day listed above. Do not skip any.
 
         RULES:
-        - ONLY describe what is explicitly stated in the entries above. Do not invent or embellish.
-        - Use plain, conversational language. No flowery or literary prose.
-        - Keep descriptions concrete and specific: mention actual activities, foods, places, or objects from the entries.
-        - NEVER mention specific days, dates, or "Day X" in any text.
-        - Use vague time references like "one morning", "later that week", "as the month went on".
-        - Each section must reference DIFFERENT days.
+        - ONLY describe what is stated in the entry for that day. Do not invent details.
+        - Use plain, conversational language. No flowery prose.
+        - Be specific: mention actual activities, foods, places, or objects from the entry.
+        - NEVER mention specific dates or "Day X" in the name or description.
         - NO emojis.
         - Write in second person ("you").
 
-        For each section:
-        1. "name": Short, specific title based on what actually happened (2-4 words, e.g. "Dinner with Friends", "Snowy Walk")
-        2. "days": Which day numbers this draws from (for photo matching)
-        3. "description": 1-2 sentences describing what you actually did, based only on the entry data. Be warm but factual.
+        For each day, produce:
+        1. "name": Short title based on what happened (2-4 words, e.g. "Dinner with Friends")
+        2. "days": Array containing EXACTLY that day's number, e.g. [14]
+        3. "description": 1-2 sentences about what you did that day.
 
         Also include:
-        4. "opening": 1 sentence setting the tone, grounded in the actual entries.
-        5. "closing": 1 sentence of brief reflection.
+        4. "opening": 1 sentence setting the overall tone of the month.
+        5. "closing": 1 sentence of brief reflection on the month.
 
         Respond ONLY with JSON, no other text:
         {
           "opening": "...",
           "sections": [
-            {"name": "Title", "days": [1, 2], "description": "..."}
+            {"name": "Title", "days": [2], "description": "..."},
+            {"name": "Title", "days": [3], "description": "..."}
           ],
           "closing": "..."
         }
