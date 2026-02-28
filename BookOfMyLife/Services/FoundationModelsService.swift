@@ -472,18 +472,18 @@ class FoundationModelsService {
         return cleanedText.data(using: .utf8)
     }
 
-    // MARK: - Topic Extraction
+    // MARK: - Grouped Caption Generation
 
-    /// Generate a caption for each daily entry that has photos
-    func generateDayCaptions(
+    /// Generate captions grouped into thematic clusters (3-10 groups)
+    func generateGroupedCaptions(
         dailyEntries: [DailyEntryContext]
     ) async throws -> MagazineNarrative {
         // Filter to entries with photos only
         let entriesWithPhotos = dailyEntries.filter { !$0.photoDescriptions.isEmpty }
-        print("[Foundation Models] Generating captions for \(entriesWithPhotos.count) days with photos (out of \(dailyEntries.count) total)")
+        print("[Foundation Models] Generating grouped captions for \(entriesWithPhotos.count) days with photos (out of \(dailyEntries.count) total)")
 
-        let prompt = buildDayCaptionsPrompt(entries: entriesWithPhotos)
-        print("[Foundation Models] Caption prompt length: \(prompt.count)/\(maxPromptLength) chars")
+        let prompt = buildGroupedCaptionsPrompt(entries: entriesWithPhotos)
+        print("[Foundation Models] Grouped prompt length: \(prompt.count)/\(maxPromptLength) chars")
         print("[Foundation Models] Prompt entries:\n\(entriesWithPhotos.map { "  Day \(String(format: "%2d", $0.dayOfMonth)): mood=\($0.mood ?? "nil"), text=\($0.journalText != nil ? "yes(\($0.journalText!.count)c)" : "no"), keywords=\($0.keywords.count), photos=\($0.photoDescriptions.count)" }.joined(separator: "\n"))")
 
         guard prompt.count < maxPromptLength else {
@@ -493,22 +493,22 @@ class FoundationModelsService {
 
         let response = try await callLLMWithRetry(prompt: prompt)
 
-        guard let narrative = parseNarrativeOutput(response) else {
-            print("[Foundation Models] Failed to parse narrative from response")
+        guard let narrative = parseGroupedOutput(response) else {
+            print("[Foundation Models] Failed to parse grouped narrative from response")
             throw FoundationModelsError.parsingFailed
         }
 
-        print("[Foundation Models] Parsed narrative successfully:")
+        print("[Foundation Models] Parsed grouped narrative successfully:")
         print("[Foundation Models]   Opening: \(narrative.opening)")
         for (i, section) in narrative.sections.enumerated() {
-            print("[Foundation Models]   Section \(i+1): '\(section.name)' -> days \(section.days) | \(section.description.prefix(100))")
+            print("[Foundation Models]   Section \(i+1): group='\(section.name)' -> days \(section.days) | \(section.description.prefix(100))")
         }
         print("[Foundation Models]   Closing: \(narrative.closing)")
 
         return narrative
     }
 
-    private func buildDayCaptionsPrompt(entries: [DailyEntryContext]) -> String {
+    private func buildGroupedCaptionsPrompt(entries: [DailyEntryContext]) -> String {
         // Format each entry with its day number
         let entriesText = entries.map { entry in
             var parts: [String] = ["Day \(entry.dayOfMonth):"]
@@ -526,93 +526,129 @@ class FoundationModelsService {
             return parts.joined(separator: " | ")
         }.joined(separator: "\n")
 
-        // List the exact day numbers we need captions for
+        // List the exact day numbers
         let dayNumbers = entries.map { String($0.dayOfMonth) }.joined(separator: ", ")
+        let entryCount = entries.count
+        let minGroups = max(3, entryCount / 5)
+        let maxGroups = min(10, max(3, entryCount / 2))
 
         return """
-        You are writing short photo captions for a personal journal.
+        You are organizing a personal journal's monthly photos into thematic groups.
 
         JOURNAL ENTRIES:
         \(entriesText)
 
-        Write exactly ONE caption for EACH of the following days: \(dayNumbers).
-        You MUST produce one section per day listed above. Do not skip any.
+        TASK:
+        1. Review ALL entries above and identify \(minGroups)-\(maxGroups) thematic groups (e.g. "Food & Dining", "Work Life", "Outdoors", "Music", "Family Time").
+        2. Assign EVERY day to exactly one group. Days: \(dayNumbers). Do NOT skip any day.
+        3. Write a short caption for each day within its group.
 
         RULES:
-        - ONLY describe what is stated in the entry for that day. Do not invent details.
+        - Every day listed above MUST appear in exactly one group. No day left out.
+        - Group names should be short (2-4 words) and descriptive.
+        - ONLY describe what is stated in the entries. Do not invent details.
         - Use plain, conversational language. No flowery prose.
         - Be specific: mention actual activities, foods, places, or objects from the entry.
-        - NEVER mention specific dates or "Day X" in the name or description.
-        - NO emojis.
-        - Write in second person ("you").
-
-        For each day, produce:
-        1. "name": Short title based on what happened (2-4 words, e.g. "Dinner with Friends")
-        2. "days": Array containing EXACTLY that day's number, e.g. [14]
-        3. "description": 1-2 sentences about what you did that day.
-
-        Also include:
-        4. "opening": 1 sentence setting the overall tone of the month.
-        5. "closing": 1 sentence of brief reflection on the month.
+        - NEVER mention specific dates or "Day X" in captions.
+        - NO emojis. Write in second person ("you").
 
         Respond ONLY with JSON, no other text:
         {
-          "opening": "...",
-          "sections": [
-            {"name": "Title", "days": [2], "description": "..."},
-            {"name": "Title", "days": [3], "description": "..."}
+          "opening": "1 sentence setting the overall tone of the month.",
+          "groups": [
+            {
+              "name": "Group Name",
+              "entries": [
+                {"day": 2, "caption": "1-2 sentences about what you did."},
+                {"day": 5, "caption": "1-2 sentences about what you did."}
+              ]
+            }
           ],
-          "closing": "..."
+          "closing": "1 sentence of brief reflection on the month."
         }
         """
     }
 
-    private func parseNarrativeOutput(_ jsonString: String) -> MagazineNarrative? {
-        print("[Foundation Models] Raw narrative response:\n\(jsonString)")
+    /// Parse GroupedNarrative response and flatten into MagazineNarrative
+    private func parseGroupedOutput(_ jsonString: String) -> MagazineNarrative? {
+        print("[Foundation Models] Raw grouped response:\n\(jsonString)")
 
         guard let jsonData = extractJSON(from: jsonString) else {
-            print("[Foundation Models] Failed to extract JSON from narrative response")
+            print("[Foundation Models] Failed to extract JSON from grouped response")
             return nil
         }
 
-        // Try parsing as MagazineNarrative
+        // Try decoding as GroupedNarrative
+        var grouped: GroupedNarrative?
+
         do {
-            let narrative = try JSONDecoder().decode(MagazineNarrative.self, from: jsonData)
-            print("[Foundation Models] Parsed narrative with \(narrative.sections.count) sections")
-            return narrative
+            grouped = try JSONDecoder().decode(GroupedNarrative.self, from: jsonData)
+            print("[Foundation Models] Decoded GroupedNarrative with \(grouped!.groups.count) groups")
         } catch {
-            print("[Foundation Models] MagazineNarrative parsing failed: \(error)")
+            print("[Foundation Models] GroupedNarrative decoding failed: \(error)")
         }
 
-        // Try manual parsing
-        if let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+        // Try manual parsing as fallback
+        if grouped == nil,
+           let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
             let opening = json["opening"] as? String ?? ""
             let closing = json["closing"] as? String ?? ""
+            var groups: [NarrativeGroup] = []
 
-            var sections: [ExtractedTopic] = []
-            if let sectionsArray = json["sections"] as? [[String: Any]] {
-                for item in sectionsArray {
-                    if let name = item["name"] as? String,
-                       let description = item["description"] as? String {
-                        var days: [Int] = []
-                        if let daysArray = item["days"] as? [Int] {
-                            days = daysArray
-                        } else if let daysArray = item["days"] as? [String] {
-                            days = daysArray.compactMap { Int($0) }
+            if let groupsArray = json["groups"] as? [[String: Any]] {
+                for groupObj in groupsArray {
+                    let name = groupObj["name"] as? String ?? "Untitled"
+                    var entries: [DayCaption] = []
+                    if let entriesArray = groupObj["entries"] as? [[String: Any]] {
+                        for entryObj in entriesArray {
+                            let day: Int
+                            if let d = entryObj["day"] as? Int {
+                                day = d
+                            } else if let d = entryObj["day"] as? String, let di = Int(d) {
+                                day = di
+                            } else {
+                                continue
+                            }
+                            let caption = entryObj["caption"] as? String ?? ""
+                            entries.append(DayCaption(day: day, caption: caption))
                         }
-                        sections.append(ExtractedTopic(name: name, days: days, description: description))
+                    }
+                    if !entries.isEmpty {
+                        groups.append(NarrativeGroup(name: name, entries: entries))
                     }
                 }
             }
 
-            if !sections.isEmpty {
-                print("[Foundation Models] Manually parsed narrative with \(sections.count) sections")
-                return MagazineNarrative(opening: opening, sections: sections, closing: closing)
+            if !groups.isEmpty {
+                grouped = GroupedNarrative(opening: opening, groups: groups, closing: closing)
+                print("[Foundation Models] Manually parsed GroupedNarrative with \(groups.count) groups")
             }
         }
 
-        print("[Foundation Models] Failed to parse narrative - no valid format found")
-        return nil
+        guard let result = grouped else {
+            print("[Foundation Models] Failed to parse grouped narrative - no valid format found")
+            return nil
+        }
+
+        // Flatten GroupedNarrative → MagazineNarrative
+        // Each day entry becomes one ExtractedTopic with name = group name
+        var sections: [ExtractedTopic] = []
+        for group in result.groups {
+            print("[Foundation Models]   Group '\(group.name)': \(group.entries.count) entries -> days \(group.entries.map { $0.day })")
+            for entry in group.entries {
+                sections.append(ExtractedTopic(
+                    name: group.name,
+                    days: [entry.day],
+                    description: entry.caption
+                ))
+            }
+        }
+
+        // Sort sections by day number for chronological photo matching
+        sections.sort { ($0.days.first ?? 0) < ($1.days.first ?? 0) }
+
+        print("[Foundation Models] Flattened to \(sections.count) sections across \(result.groups.count) groups")
+        return MagazineNarrative(opening: result.opening, sections: sections, closing: result.closing)
     }
 
     // MARK: - Helpers

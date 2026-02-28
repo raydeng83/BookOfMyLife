@@ -398,7 +398,7 @@ class MonthlyPackGenerator {
                 do {
                     let entriesWithPhotos = dailyEntries.filter { !$0.photoDescriptions.isEmpty }
                     print("[ThemePhotos] Generating captions for \(entriesWithPhotos.count) days with photos...")
-                    let narrative = try await service.generateDayCaptions(dailyEntries: dailyEntries)
+                    let narrative = try await service.generateGroupedCaptions(dailyEntries: dailyEntries)
                     print("[ThemePhotos] AI generated \(narrative.sections.count) captions:")
                     for section in narrative.sections {
                         print("[ThemePhotos]   - '\(section.name)' days=\(section.days): \(section.description.prefix(60))...")

@@ -229,6 +229,22 @@ struct MonthlyPackDetailView: View {
 
     // MARK: - New Yorker Style Magazine Layout
 
+    /// Group themePhotos by their theme name, preserving order of first appearance
+    private var groupedThemePhotos: [(groupName: String, photos: [ThemePhoto])] {
+        var order: [String] = []
+        var groups: [String: [ThemePhoto]] = [:]
+        for tp in themePhotos {
+            if groups[tp.theme] == nil {
+                order.append(tp.theme)
+            }
+            groups[tp.theme, default: []].append(tp)
+        }
+        return order.compactMap { name in
+            guard let photos = groups[name] else { return nil }
+            return (groupName: name, photos: photos)
+        }
+    }
+
     @ViewBuilder
     private var magazineContent: some View {
         // Opening
@@ -241,16 +257,36 @@ struct MonthlyPackDetailView: View {
                 .padding(.bottom, 12)
         }
 
-        // Story sections - each photo with its narrative
-        ForEach(Array(themePhotos.enumerated()), id: \.element.id) { index, themePhoto in
-            StorySection(
-                themePhoto: themePhoto,
-                isPhotoLeft: index % 2 == 0,
-                onPhotoTap: {
-                    selectedPhotoIndex = index
-                    showingPhotoViewer = true
+        // Story sections grouped by theme
+        ForEach(Array(groupedThemePhotos.enumerated()), id: \.element.groupName) { groupIndex, group in
+            // Group header
+            VStack(alignment: .leading, spacing: 4) {
+                if groupIndex > 0 {
+                    Divider()
+                        .padding(.horizontal)
+                        .padding(.top, 8)
                 }
-            )
+
+                Text(group.groupName)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                    .padding(.horizontal)
+                    .padding(.top, groupIndex > 0 ? 8 : 0)
+            }
+
+            // Photos within this group
+            ForEach(Array(group.photos.enumerated()), id: \.element.id) { photoIndex, themePhoto in
+                let globalIndex = themePhotos.firstIndex(where: { $0.id == themePhoto.id }) ?? photoIndex
+                StorySection(
+                    themePhoto: themePhoto,
+                    isPhotoLeft: photoIndex % 2 == 0,
+                    onPhotoTap: {
+                        selectedPhotoIndex = globalIndex
+                        showingPhotoViewer = true
+                    }
+                )
+            }
         }
 
         // Closing

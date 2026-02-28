@@ -74,3 +74,24 @@ struct MagazineNarrative: Codable {
     /// Closing reflection (1-2 sentences)
     var closing: String
 }
+
+// MARK: - Grouped Narrative (LLM groups entries by theme)
+
+/// LLM response with entries grouped into thematic clusters
+struct GroupedNarrative: Codable {
+    var opening: String
+    var groups: [NarrativeGroup]
+    var closing: String
+}
+
+/// A thematic group containing multiple day entries
+struct NarrativeGroup: Codable {
+    var name: String
+    var entries: [DayCaption]
+}
+
+/// A single day's caption within a group
+struct DayCaption: Codable {
+    var day: Int
+    var caption: String
+}
