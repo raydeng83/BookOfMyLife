@@ -88,7 +88,7 @@ class DigestProcessor {
         let day = digest.date.map { calendar.component(.day, from: $0) } ?? -1
 
         var photos = [PhotoInfo].decoded(from: photosData)
-        var hasChanges = false
+        var hasPhotoChanges = false
 
         for i in 0..<photos.count {
             // Only reprocess if scenes are empty
@@ -100,7 +100,7 @@ class DigestProcessor {
                     photos[i].hasFaces = hasFaces
                     photos[i].qualityScore = quality
                     photos[i].ocrText = ocrText
-                    hasChanges = true
+                    hasPhotoChanges = true
 
                     print("[DigestProcessor] Day \(day) photo \(i+1): scenes=[\(scenes.joined(separator: ", "))], faces=\(hasFaces), quality=\(String(format: "%.2f", quality))")
                 } else {
@@ -111,10 +111,22 @@ class DigestProcessor {
             }
         }
 
-        if hasChanges {
+        if hasPhotoChanges {
             digest.photosData = photos.encoded()
+        }
 
-            // Rebuild keywords: existing NLP keywords + all photo scenes
+        // Check if keywords need rebuilding (empty keywords but photos have scenes)
+        let existingKeywords: [String]
+        if let kd = digest.keywordsData {
+            existingKeywords = [String].decoded(from: kd)
+        } else {
+            existingKeywords = []
+        }
+        let photosHaveScenes = photos.contains { !$0.detectedScenes.isEmpty }
+        let needsKeywordRebuild = hasPhotoChanges || (existingKeywords.isEmpty && photosHaveScenes)
+
+        if needsKeywordRebuild {
+            // Rebuild keywords: NLP keywords + all photo scenes
             var keywords: [String] = []
 
             // Re-extract NLP keywords from journal text
@@ -141,8 +153,10 @@ class DigestProcessor {
             digest.keywordsData = keywords.encoded()
 
             try? context.save()
+        } else if !existingKeywords.isEmpty {
+            print("[DigestProcessor] Day \(day): keywords already populated (\(existingKeywords.count) keywords)")
         } else {
-            print("[DigestProcessor] Day \(day): no changes needed (\(photos.count) photos already analyzed)")
+            print("[DigestProcessor] Day \(day): no photos with scenes, skipping keyword rebuild")
         }
     }
 }

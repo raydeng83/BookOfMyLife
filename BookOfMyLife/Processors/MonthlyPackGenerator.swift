@@ -78,8 +78,18 @@ class MonthlyPackGenerator {
             print("[MonthlyPack]   Day \(entry.dayOfMonth) (\(entry.weekday)): mood=\(entry.mood ?? "nil"), text=\(entry.journalText?.prefix(50) ?? "nil"), keywords=\(entry.keywords.prefix(5)), photos=\(entry.photoDescriptions.count)")
         }
 
+        // Dynamic topic count: ~1 section per 2-3 entries with photos, min 3, max 10
+        let daysWithPhotos = updatedDigests.filter { digest in
+            if let pd = digest.photosData {
+                return ![PhotoInfo].decoded(from: pd).isEmpty
+            }
+            return false
+        }.count
+        let maxTopics = min(max(daysWithPhotos / 2, 3), 10)
+        print("[MonthlyPack] Days with photos: \(daysWithPhotos), maxTopics: \(maxTopics)")
+
         // Extract narrative and photos using AI (try AI, fallback to keyword matching)
-        let (themePhotos, opening, closing) = await selectPhotosWithAI(from: updatedDigests, dailyEntries: dailyEntries, stats: stats, maxTopics: 5)
+        let (themePhotos, opening, closing) = await selectPhotosWithAI(from: updatedDigests, dailyEntries: dailyEntries, stats: stats, maxTopics: maxTopics)
 
         // Format the narrative summary (opening + closing only, sections are in themePhotos)
         let narrativeSummary: String
