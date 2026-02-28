@@ -10,7 +10,7 @@ import CoreData
 
 struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
-    @State private var selectedTab = 0
+    @State private var selectedTab = 1  // Default to Month Book for testing
 
     var body: some View {
         ZStack {

@@ -52,6 +52,10 @@ struct MonthBookView: View {
             }
             .navigationTitle("Month Book")
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // Auto-regenerate summary on launch for testing
+                generateMonthlyPack()
+            }
             .overlay {
                 if isGenerating {
                     ZStack {
