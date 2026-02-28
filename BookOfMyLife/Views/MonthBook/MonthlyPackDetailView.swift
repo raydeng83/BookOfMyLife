@@ -250,30 +250,36 @@ struct MonthlyPackDetailView: View {
         // Opening
         if let opening = openingText {
             Text(opening)
-                .font(.body)
+                .font(.title3)
+                .fontWeight(.light)
+                .italic()
                 .lineSpacing(6)
-                .foregroundColor(.primary.opacity(0.85))
-                .padding(.horizontal)
-                .padding(.bottom, 12)
+                .foregroundColor(.primary.opacity(0.75))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
         }
 
         // Story sections grouped by theme
         ForEach(Array(groupedThemePhotos.enumerated()), id: \.element.groupName) { groupIndex, group in
             // Group header
-            VStack(alignment: .leading, spacing: 4) {
-                if groupIndex > 0 {
-                    Divider()
-                        .padding(.horizontal)
-                        .padding(.top, 8)
-                }
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(group.groupName.uppercased())
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.secondary)
+                        .tracking(1.5)
 
-                Text(group.groupName)
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                    .padding(.horizontal)
-                    .padding(.top, groupIndex > 0 ? 8 : 0)
+                    Text("\(group.photos.count) \(group.photos.count == 1 ? "moment" : "moments")")
+                        .font(.caption2)
+                        .foregroundColor(.secondary.opacity(0.7))
+                }
+                Spacer()
             }
+            .padding(.horizontal, 16)
+            .padding(.top, groupIndex > 0 ? 20 : 8)
+            .padding(.bottom, 4)
 
             // Photos within this group
             ForEach(Array(group.photos.enumerated()), id: \.element.id) { photoIndex, themePhoto in
@@ -291,11 +297,15 @@ struct MonthlyPackDetailView: View {
         // Closing
         if let closing = closingText {
             Text(closing)
-                .font(.body)
+                .font(.title3)
+                .fontWeight(.light)
+                .italic()
                 .lineSpacing(6)
-                .foregroundColor(.primary.opacity(0.85))
-                .padding(.horizontal)
-                .padding(.top, 16)
+                .foregroundColor(.primary.opacity(0.75))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+                .padding(.bottom, 8)
         }
     }
 
@@ -380,7 +390,7 @@ struct StatItem: View {
     }
 }
 
-// MARK: - Story Section (New Yorker style)
+// MARK: - Story Section (Photo-first card with gradient text overlay)
 
 struct StorySection: View {
     let themePhoto: ThemePhoto
@@ -388,49 +398,64 @@ struct StorySection: View {
     @State private var currentPage = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Description text
-            if let desc = themePhoto.description, !desc.isEmpty {
-                Text(desc)
-                    .font(.body)
-                    .lineSpacing(6)
-                    .foregroundColor(.primary.opacity(0.85))
-                    .padding(.horizontal)
-            }
-
-            // Paged photo viewer — one photo at a time, swipe to change
+        ZStack(alignment: .bottom) {
+            // Paged photo — full width, one at a time
             TabView(selection: $currentPage) {
                 ForEach(Array(themePhoto.photos.enumerated()), id: \.element.id) { index, photo in
                     if let image = photo.loadImage() {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(height: 240)
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .padding(.horizontal)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 320)
+                            .clipped()
+                            .contentShape(Rectangle())
                             .onTapGesture(perform: onPhotoTap)
                             .tag(index)
                     } else {
-                        RoundedRectangle(cornerRadius: 10)
+                        Rectangle()
                             .fill(Color.secondary.opacity(0.15))
-                            .frame(height: 240)
-                            .padding(.horizontal)
+                            .frame(height: 320)
                             .tag(index)
                     }
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: themePhoto.photos.count > 1 ? .automatic : .never))
-            .frame(height: 260)
+            .frame(height: 320)
 
-            // Photo counter for multi-photo entries
-            if themePhoto.photos.count > 1 {
-                Text("\(currentPage + 1) / \(themePhoto.photos.count)")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
+            // Gradient overlay with text at bottom
+            if let desc = themePhoto.description, !desc.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Spacer()
+
+                    Text(desc)
+                        .font(.subheadline)
+                        .lineSpacing(4)
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+
+                    if themePhoto.photos.count > 1 {
+                        Text("\(currentPage + 1) / \(themePhoto.photos.count)")
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
+                .padding(.top, 60)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.6)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
             }
         }
-        .padding(.vertical, 8)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 }
 
