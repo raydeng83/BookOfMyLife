@@ -25,6 +25,7 @@ struct ContentView: View {
         }
         .edgesIgnoringSafeArea(.all)
         .ignoresSafeArea(.all)
+        .padding(.bottom, 5)
     }
 
     var contentView: some View {
@@ -56,9 +57,7 @@ struct ContentView: View {
             TabBarButton(title: "Year Book", icon: "calendar.badge.clock", tag: 2, selectedTab: $selectedTab)
             TabBarButton(title: "Me", icon: "person.fill", tag: 3, selectedTab: $selectedTab)
         }
-        .frame(height: 49)
-        .padding(.top, 12)
-        .padding(.bottom, 24)
+        .frame(height: 70)
         .background(.ultraThinMaterial)
     }
 
@@ -80,6 +79,7 @@ struct TabBarButton: View {
                 Text(title)
                     .font(.caption2)
             }
+            .padding(.vertical, 16)
             .foregroundColor(selectedTab == tag ? .accentColor : .gray)
             .frame(maxWidth: .infinity)
         }

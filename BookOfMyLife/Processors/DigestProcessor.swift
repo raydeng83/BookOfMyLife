@@ -77,7 +77,7 @@ class DigestProcessor {
         }
     }
 
-    // Reprocess only photos for existing digests (updates photo metadata without resetting other data)
+    // Reprocess only photos for existing digests (updates photo metadata and keywords)
     func reprocessPhotos(_ digest: DailyDigest, context: NSManagedObjectContext) async {
         guard let photosData = digest.photosData else { return }
 
@@ -103,6 +103,30 @@ class DigestProcessor {
 
         if hasChanges {
             digest.photosData = photos.encoded()
+
+            // Rebuild keywords: existing NLP keywords + all photo scenes
+            var keywords: [String] = []
+
+            // Re-extract NLP keywords from journal text
+            if let text = digest.journalText, !text.isEmpty {
+                let (_, extractedKeywords, entities) = nlpAnalyzer.analyzeText(text)
+                keywords.append(contentsOf: extractedKeywords)
+                keywords.append(contentsOf: entities)
+            }
+
+            // Add all photo scenes and OCR keywords
+            for photo in photos {
+                keywords.append(contentsOf: photo.detectedScenes)
+                if let ocrText = photo.ocrText, !ocrText.isEmpty {
+                    let (_, ocrKeywords, _) = nlpAnalyzer.analyzeText(ocrText)
+                    keywords.append(contentsOf: ocrKeywords)
+                }
+            }
+
+            // Deduplicate and limit
+            keywords = Array(Set(keywords)).prefix(20).map { $0 }
+            digest.keywordsData = keywords.encoded()
+
             try? context.save()
         }
     }

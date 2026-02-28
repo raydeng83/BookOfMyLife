@@ -454,16 +454,16 @@ class FoundationModelsService {
         cleanedText = cleanedText.replacingOccurrences(of: "```", with: "")
         cleanedText = cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Try to find JSON array in response
-        if let startIndex = cleanedText.firstIndex(of: "["),
-           let endIndex = cleanedText.lastIndex(of: "]") {
+        // Try to find JSON object first (most LLM responses are objects that may contain arrays)
+        if let startIndex = cleanedText.firstIndex(of: "{"),
+           let endIndex = cleanedText.lastIndex(of: "}") {
             let jsonString = String(cleanedText[startIndex...endIndex])
             return jsonString.data(using: .utf8)
         }
 
-        // Try to find JSON object in response
-        if let startIndex = cleanedText.firstIndex(of: "{"),
-           let endIndex = cleanedText.lastIndex(of: "}") {
+        // Try to find JSON array in response
+        if let startIndex = cleanedText.firstIndex(of: "["),
+           let endIndex = cleanedText.lastIndex(of: "]") {
             let jsonString = String(cleanedText[startIndex...endIndex])
             return jsonString.data(using: .utf8)
         }
@@ -513,39 +513,39 @@ class FoundationModelsService {
         }.joined(separator: "\n")
 
         return """
-        You are writing a personal magazine article about someone's month, like The New Yorker style.
+        You are writing short captions for a personal photo journal about someone's month.
 
         JOURNAL ENTRIES:
         \(entriesText)
 
-        Create a flowing narrative with \(maxTopics) story sections. Each section centers on a meaningful moment or theme from the entries.
+        Create \(maxTopics) story sections. Each section pairs with a photo from a specific day.
+
+        RULES:
+        - ONLY describe what is explicitly stated in the entries above. Do not invent or embellish.
+        - Use plain, conversational language. No flowery or literary prose.
+        - Keep descriptions concrete and specific: mention actual activities, foods, places, or objects from the entries.
+        - NEVER mention specific days, dates, or "Day X" in any text.
+        - Use vague time references like "one morning", "later that week", "as the month went on".
+        - Each section must reference DIFFERENT days.
+        - NO emojis.
+        - Write in second person ("you").
 
         For each section:
-        1. "name": A poetic or evocative title (2-5 words)
-        2. "days": Which days this story draws from (for photo matching only)
-        3. "description": 2-3 sentences of narrative prose that tells the story of this moment. Write in second person ("you"). Be warm, reflective, and literary.
+        1. "name": Short, specific title based on what actually happened (2-4 words, e.g. "Dinner with Friends", "Snowy Walk")
+        2. "days": Which day numbers this draws from (for photo matching)
+        3. "description": 1-2 sentences describing what you actually did, based only on the entry data. Be warm but factual.
 
         Also include:
-        4. "opening": 1-2 sentences to open the article (sets the tone for the month)
-        5. "closing": 1-2 sentences to close (reflective ending)
+        4. "opening": 1 sentence setting the tone, grounded in the actual entries.
+        5. "closing": 1 sentence of brief reflection.
 
-        CRITICAL WRITING RULES:
-        - NEVER mention specific days, dates, or "Day X" in any text
-        - Use vague time references like "one morning", "later that week", "as the month progressed", "on a quiet afternoon"
-        - Each section should reference DIFFERENT days - do not assign the same day to multiple sections
-        - Write like a personal essay, not a summary
-        - Each description should flow naturally and tell a mini-story
-        - Be specific to what actually happened based on the entries
-        - Don't make up events not in the entries
-        - NO emojis
-
-        Respond with JSON:
+        Respond ONLY with JSON, no other text:
         {
-          "opening": "Opening prose...",
+          "opening": "...",
           "sections": [
-            {"name": "Title", "days": [1, 2], "description": "Narrative prose with vague time references..."}
+            {"name": "Title", "days": [1, 2], "description": "..."}
           ],
-          "closing": "Closing reflection..."
+          "closing": "..."
         }
         """
     }

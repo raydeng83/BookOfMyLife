@@ -554,32 +554,41 @@ class MonthlyPackGenerator {
             let timeRefs = ["One quiet morning", "On a memorable afternoon", "During a peaceful moment", "On a special occasion", "In a cherished moment"]
 
             for (index, item) in topPhotos.enumerated() {
-                let keywords: [String]
-                if let keywordsData = item.digest.keywordsData {
-                    keywords = [String].decoded(from: keywordsData)
-                } else {
-                    keywords = []
-                }
+                let keywords: [String] = {
+                    if let keywordsData = item.digest.keywordsData {
+                        return [String].decoded(from: keywordsData)
+                    }
+                    return []
+                }()
+
+                // Filter keywords/scenes to only meaningful, human-readable ones
+                let meaningfulKeywords = keywords.filter { !Self.genericLabels.contains($0.lowercased()) }
+                let meaningfulScenes = item.photo.detectedScenes
+                    .filter { !Self.genericLabels.contains($0.lowercased()) }
+                    .compactMap { Self.humanizeLabel($0) }
 
                 // Build description with vague time reference
-                var description: String
+                let description: String
                 let timeRef = timeRefs[index % timeRefs.count]
 
-                if !keywords.isEmpty {
-                    description = "\(timeRef), you captured a moment featuring \(keywords.prefix(2).joined(separator: " and "))."
-                } else if !item.photo.detectedScenes.isEmpty {
-                    let scenes = item.photo.detectedScenes.prefix(2).joined(separator: " and ")
-                    description = "\(timeRef), you found yourself surrounded by \(scenes)."
+                if !meaningfulKeywords.isEmpty {
+                    description = "\(timeRef), you captured a moment featuring \(meaningfulKeywords.prefix(2).joined(separator: " and "))."
+                } else if !meaningfulScenes.isEmpty {
+                    description = "\(timeRef), you captured a moment with \(meaningfulScenes.prefix(2).joined(separator: " and "))."
+                } else if item.photo.hasFaces {
+                    description = "\(timeRef), you captured a moment with the people around you."
                 } else {
                     description = "\(timeRef), you paused to capture this memory."
                 }
 
-                // Generate evocative title from keywords or scenes
+                // Generate title from meaningful keywords/scenes
                 let title: String
-                if let firstKeyword = keywords.first {
-                    title = firstKeyword.capitalized
-                } else if let firstScene = item.photo.detectedScenes.first {
-                    title = firstScene.capitalized
+                if let first = meaningfulKeywords.first {
+                    title = first.capitalized
+                } else if let first = meaningfulScenes.first {
+                    title = first.capitalized
+                } else if item.photo.hasFaces {
+                    title = "Familiar Faces"
                 } else {
                     title = "A Quiet Moment"
                 }
@@ -591,7 +600,7 @@ class MonthlyPackGenerator {
                     description: description
                 )
                 themePhotos.append(themePhoto)
-                print("[ThemePhotos] Fallback: Moment \(index + 1) | Desc: \(description ?? "none")")
+                print("[ThemePhotos] Fallback: Moment \(index + 1) | Desc: \(description)")
             }
         }
 
@@ -631,5 +640,52 @@ class MonthlyPackGenerator {
         let newPack = MonthlyPack(context: context)
         newPack.id = UUID()
         return newPack
+    }
+
+    // MARK: - Vision Label Helpers
+
+    /// Labels that are too generic or technical to use in prose
+    private static let genericLabels: Set<String> = [
+        "document", "screenshot", "printed_page", "adult", "people", "person",
+        "structure", "material", "object", "sign", "machine", "cord",
+        "wood_processed", "circuit_board", "map"
+    ]
+
+    /// Map raw Vision identifiers to human-readable descriptions
+    private static func humanizeLabel(_ label: String) -> String? {
+        let mapping: [String: String] = [
+            "outdoor": "the outdoors",
+            "sky": "open sky",
+            "blue_sky": "clear blue sky",
+            "frozen": "a frozen landscape",
+            "snow": "snow",
+            "liquid": "water",
+            "water": "water",
+            "food": "food",
+            "utensil": "a meal",
+            "tableware": "a dining table",
+            "chopsticks": "a meal",
+            "plate": "a meal",
+            "toy": "a toy",
+            "figurine": "a figurine",
+            "music": "music",
+            "musical_instrument": "a musical instrument",
+            "string_instrument": "a string instrument",
+            "crowd": "a crowd",
+            "cat": "a cat",
+            "dog": "a dog",
+            "plant": "greenery",
+            "flower": "flowers",
+            "tree": "trees",
+            "mountain": "mountains",
+            "beach": "the beach",
+            "sunset": "a sunset",
+            "sunrise": "a sunrise",
+            "car": "a car",
+            "bicycle": "a bicycle",
+            "building": "a building",
+            "book": "a book",
+        ]
+        return mapping[label.lowercased()] ?? label.replacingOccurrences(of: "_", with: " ")
     }
 }
