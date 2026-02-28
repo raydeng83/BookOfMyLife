@@ -431,11 +431,10 @@ class MonthlyPackGenerator {
         return (photos, nil, nil)
     }
 
-    /// Select best photo for each AI-extracted topic (one photo per day max)
+    /// Select all photos for each AI-extracted topic, sorted by quality
     private func selectPhotosForTopics(topics: [ExtractedTopic], digests: [DailyDigest]) -> [ThemePhoto] {
         var themePhotos: [ThemePhoto] = []
-        var usedPhotoIds: Set<UUID> = []
-        var usedDays: Set<Int> = []  // Track used days to avoid multiple photos from same day
+        var usedDays: Set<Int> = []  // Track used days to avoid duplicates across topics
 
         // Create a map of day number to digest
         let calendar = Calendar.current
@@ -462,11 +461,12 @@ class MonthlyPackGenerator {
         print("[PhotoMatch] Processing \(topics.count) AI sections...")
         for (topicIndex, topic) in topics.enumerated() {
             print("[PhotoMatch] --- Section \(topicIndex + 1): '\(topic.name)' | requested days: \(topic.days) ---")
-            var bestMatch: (photo: PhotoInfo, day: Int, score: Double)?
 
-            // Look at digests for the days associated with this topic
+            // Collect all photos from this topic's days, sorted by score
+            var allPhotosForTopic: [(photo: PhotoInfo, score: Double)] = []
+            var matchedDay: Int?
+
             for dayNum in topic.days {
-                // Skip days already used by other topics
                 if usedDays.contains(dayNum) {
                     print("[PhotoMatch]   Day \(dayNum): SKIPPED (already used by previous section)")
                     continue
@@ -481,41 +481,36 @@ class MonthlyPackGenerator {
                 }
 
                 let photos = [PhotoInfo].decoded(from: photosData)
-                print("[PhotoMatch]   Day \(dayNum): checking \(photos.count) photo(s)...")
+                print("[PhotoMatch]   Day \(dayNum): collecting \(photos.count) photo(s)...")
 
                 for photo in photos {
-                    if usedPhotoIds.contains(photo.id) {
-                        print("[PhotoMatch]     Photo \(photo.id.uuidString.prefix(8)): SKIPPED (already used)")
-                        continue
-                    }
-
-                    // Score the photo
                     var score = photo.qualityScore
                     if digest.isStarred { score += 0.3 }
                     if photo.hasFaces { score += 0.2 }
-
-                    print("[PhotoMatch]     Photo \(photo.id.uuidString.prefix(8)): score=\(String(format: "%.2f", score)) (quality=\(String(format: "%.2f", photo.qualityScore)), faces=\(photo.hasFaces), starred=\(digest.isStarred))")
-
-                    if bestMatch == nil || score > bestMatch!.score {
-                        bestMatch = (photo, dayNum, score)
-                    }
+                    allPhotosForTopic.append((photo, score))
+                    print("[PhotoMatch]     Photo \(photo.id.uuidString.prefix(8)): score=\(String(format: "%.2f", score))")
                 }
+
+                matchedDay = dayNum
             }
 
-            // Add best photo for this topic
-            if let match = bestMatch {
+            // Sort by score (best first) and create ThemePhoto with all photos
+            if !allPhotosForTopic.isEmpty, let day = matchedDay {
+                let sortedPhotos = allPhotosForTopic
+                    .sorted { $0.score > $1.score }
+                    .map { $0.photo }
+
                 let themePhoto = ThemePhoto(
                     theme: topic.name,
-                    photo: match.photo,
+                    photos: sortedPhotos,
                     dayKeywords: [],
                     description: topic.description
                 )
                 themePhotos.append(themePhoto)
-                usedPhotoIds.insert(match.photo.id)
-                usedDays.insert(match.day)  // Mark day as used
-                print("[PhotoMatch] ✓ Section \(topicIndex + 1) matched: '\(topic.name)' -> Day \(match.day), score=\(String(format: "%.2f", match.score))")
+                usedDays.insert(day)
+                print("[PhotoMatch] ✓ Section \(topicIndex + 1) matched: '\(topic.name)' -> Day \(day), \(sortedPhotos.count) photo(s)")
             } else {
-                print("[PhotoMatch] ✗ Section \(topicIndex + 1) DROPPED: '\(topic.name)' | days \(topic.days) -> no usable photo found")
+                print("[PhotoMatch] ✗ Section \(topicIndex + 1) DROPPED: '\(topic.name)' | days \(topic.days) -> no photos found")
             }
         }
 
@@ -604,7 +599,7 @@ class MonthlyPackGenerator {
             if let match = bestMatch {
                 let themePhoto = ThemePhoto(
                     theme: theme.capitalized,
-                    photo: match.photo,
+                    photos: [match.photo],
                     dayKeywords: match.keywords.map { $0.capitalized },
                     description: nil
                 )
@@ -677,7 +672,7 @@ class MonthlyPackGenerator {
 
                 let themePhoto = ThemePhoto(
                     theme: title,
-                    photo: item.photo,
+                    photos: [item.photo],
                     dayKeywords: [],
                     description: description
                 )

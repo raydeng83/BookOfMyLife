@@ -533,7 +533,7 @@ class FoundationModelsService {
         let maxGroups = min(10, max(3, entryCount / 2))
 
         return """
-        You are organizing a personal journal's monthly photos into thematic groups.
+        You are writing a personal monthly photo journal, organizing entries into thematic groups.
 
         JOURNAL ENTRIES:
         \(entriesText)
@@ -541,30 +541,35 @@ class FoundationModelsService {
         TASK:
         1. Review ALL entries above and identify \(minGroups)-\(maxGroups) thematic groups (e.g. "Food & Dining", "Work Life", "Outdoors", "Music", "Family Time").
         2. Assign EVERY day to exactly one group. Days: \(dayNumbers). Do NOT skip any day.
-        3. Write a short caption for each day within its group.
+        3. Write a vivid caption for each day within its group.
+
+        STYLE:
+        - Write like a warm, personal journal entry — as if reminiscing with a close friend.
+        - Be specific: mention actual activities, foods, places, people, or objects from the entry.
+        - Add sensory details or feelings when the entry supports it (e.g. "the cold bite of winter air" if weather is mentioned, "a comforting bowl of ramen" if food is mentioned).
+        - Keep each caption 2-3 sentences. Not too short, not too long.
+        - Write in second person ("you").
 
         RULES:
         - Every day listed above MUST appear in exactly one group. No day left out.
         - Group names should be short (2-4 words) and descriptive.
-        - ONLY describe what is stated in the entries. Do not invent details.
-        - Use plain, conversational language. No flowery prose.
-        - Be specific: mention actual activities, foods, places, or objects from the entry.
+        - ONLY reference what is stated or clearly implied in the entries. Do not fabricate events.
         - NEVER mention specific dates or "Day X" in captions.
-        - NO emojis. Write in second person ("you").
+        - NO emojis.
 
         Respond ONLY with JSON, no other text:
         {
-          "opening": "1 sentence setting the overall tone of the month.",
+          "opening": "1-2 sentences setting the overall tone and feel of the month.",
           "groups": [
             {
               "name": "Group Name",
               "entries": [
-                {"day": 2, "caption": "1-2 sentences about what you did."},
-                {"day": 5, "caption": "1-2 sentences about what you did."}
+                {"day": 2, "caption": "2-3 sentences about what you did, with vivid detail."},
+                {"day": 5, "caption": "2-3 sentences about what you did, with vivid detail."}
               ]
             }
           ],
-          "closing": "1 sentence of brief reflection on the month."
+          "closing": "1-2 sentences reflecting on the month with warmth."
         }
         """
     }

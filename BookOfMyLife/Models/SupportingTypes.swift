@@ -11,11 +11,53 @@ import UIKit
 // MARK: - Theme Photo (photo matched to a theme/keyword)
 
 struct ThemePhoto: Codable, Identifiable {
-    var id: UUID { photo.id }
+    var id: UUID = UUID()
     var theme: String
-    var photo: PhotoInfo
+    var photos: [PhotoInfo]    // All photos from this day, sorted by quality
     var dayKeywords: [String]  // All keywords from the day this photo was taken
     var description: String?   // Optional description for the theme
+
+    /// Primary (best) photo for backward compatibility
+    var photo: PhotoInfo { photos.first! }
+
+    enum CodingKeys: String, CodingKey {
+        case id, theme, photos, dayKeywords, description
+        // Support decoding legacy single-photo format
+        case photo
+    }
+
+    init(theme: String, photos: [PhotoInfo], dayKeywords: [String], description: String?) {
+        self.id = UUID()
+        self.theme = theme
+        self.photos = photos
+        self.dayKeywords = dayKeywords
+        self.description = description
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? container.decode(UUID.self, forKey: .id)) ?? UUID()
+        theme = try container.decode(String.self, forKey: .theme)
+        dayKeywords = (try? container.decode([String].self, forKey: .dayKeywords)) ?? []
+        description = try? container.decode(String.self, forKey: .description)
+        // Try new array format first, fall back to legacy single photo
+        if let arr = try? container.decode([PhotoInfo].self, forKey: .photos) {
+            photos = arr
+        } else if let single = try? container.decode(PhotoInfo.self, forKey: .photo) {
+            photos = [single]
+        } else {
+            photos = []
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(theme, forKey: .theme)
+        try container.encode(photos, forKey: .photos)
+        try container.encode(dayKeywords, forKey: .dayKeywords)
+        try container.encodeIfPresent(description, forKey: .description)
+    }
 }
 
 // MARK: - Photo Information

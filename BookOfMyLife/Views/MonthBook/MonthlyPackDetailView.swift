@@ -280,7 +280,6 @@ struct MonthlyPackDetailView: View {
                 let globalIndex = themePhotos.firstIndex(where: { $0.id == themePhoto.id }) ?? photoIndex
                 StorySection(
                     themePhoto: themePhoto,
-                    isPhotoLeft: photoIndex % 2 == 0,
                     onPhotoTap: {
                         selectedPhotoIndex = globalIndex
                         showingPhotoViewer = true
@@ -385,47 +384,42 @@ struct StatItem: View {
 
 struct StorySection: View {
     let themePhoto: ThemePhoto
-    let isPhotoLeft: Bool
     let onPhotoTap: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
-            if isPhotoLeft {
-                photoView
-                narrativeView
-            } else {
-                narrativeView
-                photoView
+        VStack(alignment: .leading, spacing: 8) {
+            // Description text
+            if let desc = themePhoto.description, !desc.isEmpty {
+                Text(desc)
+                    .font(.body)
+                    .lineSpacing(6)
+                    .foregroundColor(.primary.opacity(0.85))
+                    .padding(.horizontal)
+            }
+
+            // Scrollable photos
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(themePhoto.photos.enumerated()), id: \.element.id) { index, photo in
+                        if let image = photo.loadImage() {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 160, height: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
+                                .onTapGesture(perform: onPhotoTap)
+                        } else {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.secondary.opacity(0.15))
+                                .frame(width: 160, height: 200)
+                        }
+                    }
+                }
+                .padding(.horizontal)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 12)
-    }
-
-    private var photoView: some View {
-        Group {
-            if let image = themePhoto.photo.loadImage() {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 140, height: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
-                    .onTapGesture(perform: onPhotoTap)
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.secondary.opacity(0.15))
-                    .frame(width: 140, height: 180)
-            }
-        }
-    }
-
-    private var narrativeView: some View {
-        Text(themePhoto.description ?? "")
-            .font(.body)
-            .lineSpacing(6)
-            .foregroundColor(.primary.opacity(0.85))
-            .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 8)
     }
 }
 
