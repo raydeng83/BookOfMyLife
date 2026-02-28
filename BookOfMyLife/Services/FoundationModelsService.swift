@@ -480,16 +480,27 @@ class FoundationModelsService {
         maxTopics: Int = 5
     ) async throws -> MagazineNarrative {
         let prompt = buildTopicExtractionPrompt(dailyEntries: dailyEntries, maxTopics: maxTopics)
+        print("[Foundation Models] Topic extraction prompt length: \(prompt.count)/\(maxPromptLength) chars")
+        print("[Foundation Models] Prompt entries:\n\(dailyEntries.map { "  Day \(String(format: "%2d", $0.dayOfMonth)): mood=\($0.mood ?? "nil"), text=\($0.journalText != nil ? "yes(\($0.journalText!.count)c)" : "no"), keywords=\($0.keywords.count), photos=\($0.photoDescriptions.count)" }.joined(separator: "\n"))")
 
         guard prompt.count < maxPromptLength else {
+            print("[Foundation Models] Prompt too long (\(prompt.count) > \(maxPromptLength)), aborting")
             throw FoundationModelsError.promptTooLong
         }
 
         let response = try await callLLMWithRetry(prompt: prompt)
 
         guard let narrative = parseNarrativeOutput(response) else {
+            print("[Foundation Models] Failed to parse narrative from response")
             throw FoundationModelsError.parsingFailed
         }
+
+        print("[Foundation Models] Parsed narrative successfully:")
+        print("[Foundation Models]   Opening: \(narrative.opening)")
+        for (i, section) in narrative.sections.enumerated() {
+            print("[Foundation Models]   Section \(i+1): '\(section.name)' -> days \(section.days) | \(section.description.prefix(100))")
+        }
+        print("[Foundation Models]   Closing: \(narrative.closing)")
 
         return narrative
     }

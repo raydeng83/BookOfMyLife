@@ -79,7 +79,13 @@ class DigestProcessor {
 
     // Reprocess only photos for existing digests (updates photo metadata and keywords)
     func reprocessPhotos(_ digest: DailyDigest, context: NSManagedObjectContext) async {
-        guard let photosData = digest.photosData else { return }
+        guard let photosData = digest.photosData else {
+            print("[DigestProcessor] reprocessPhotos: no photosData, skipping")
+            return
+        }
+
+        let calendar = Calendar.current
+        let day = digest.date.map { calendar.component(.day, from: $0) } ?? -1
 
         var photos = [PhotoInfo].decoded(from: photosData)
         var hasChanges = false
@@ -96,8 +102,12 @@ class DigestProcessor {
                     photos[i].ocrText = ocrText
                     hasChanges = true
 
-                    print("[DigestProcessor] Analyzed photo: \(scenes.joined(separator: ", "))")
+                    print("[DigestProcessor] Day \(day) photo \(i+1): scenes=[\(scenes.joined(separator: ", "))], faces=\(hasFaces), quality=\(String(format: "%.2f", quality))")
+                } else {
+                    print("[DigestProcessor] Day \(day) photo \(i+1): FAILED to load image from \(photos[i].fileName)")
                 }
+            } else {
+                print("[DigestProcessor] Day \(day) photo \(i+1): already analyzed, scenes=[\(photos[i].detectedScenes.joined(separator: ", "))]")
             }
         }
 
@@ -112,6 +122,7 @@ class DigestProcessor {
                 let (_, extractedKeywords, entities) = nlpAnalyzer.analyzeText(text)
                 keywords.append(contentsOf: extractedKeywords)
                 keywords.append(contentsOf: entities)
+                print("[DigestProcessor] Day \(day) NLP keywords: \(extractedKeywords), entities: \(entities)")
             }
 
             // Add all photo scenes and OCR keywords
@@ -124,10 +135,14 @@ class DigestProcessor {
             }
 
             // Deduplicate and limit
+            let beforeCount = keywords.count
             keywords = Array(Set(keywords)).prefix(20).map { $0 }
+            print("[DigestProcessor] Day \(day) keywords rebuilt: \(beforeCount) raw -> \(keywords.count) deduplicated: \(keywords)")
             digest.keywordsData = keywords.encoded()
 
             try? context.save()
+        } else {
+            print("[DigestProcessor] Day \(day): no changes needed (\(photos.count) photos already analyzed)")
         }
     }
 }

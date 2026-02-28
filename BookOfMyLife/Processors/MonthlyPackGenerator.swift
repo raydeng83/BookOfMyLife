@@ -14,11 +14,35 @@ class MonthlyPackGenerator {
 
     // Generate or update monthly pack for a given month/year
     func generateMonthlyPack(year: Int, month: Int, context: NSManagedObjectContext) async -> MonthlyPack? {
+        print("[MonthlyPack] ========== STARTING GENERATION FOR \(month)/\(year) ==========")
+
         // Fetch all digests for this month
         let digests = fetchDigestsForMonth(year: year, month: month, context: context)
+        print("[MonthlyPack] Fetched \(digests.count) digests from Core Data")
 
         if digests.isEmpty {
+            print("[MonthlyPack] No digests found, aborting")
             return nil
+        }
+
+        // Log each digest
+        let calendar = Calendar.current
+        for digest in digests {
+            let day = digest.date.map { calendar.component(.day, from: $0) }
+            let photoCount: Int
+            if let pd = digest.photosData {
+                photoCount = [PhotoInfo].decoded(from: pd).count
+            } else {
+                photoCount = 0
+            }
+            let hasText = digest.journalText != nil && !digest.journalText!.isEmpty
+            let keywordCount: Int
+            if let kd = digest.keywordsData {
+                keywordCount = [String].decoded(from: kd).count
+            } else {
+                keywordCount = 0
+            }
+            print("[MonthlyPack]   Day \(day ?? -1): photos=\(photoCount), hasText=\(hasText), keywords=\(keywordCount), mood=\(digest.userMood ?? "nil"), starred=\(digest.isStarred)")
         }
 
         // Ensure all photos are analyzed (reprocess if needed)
@@ -29,12 +53,30 @@ class MonthlyPackGenerator {
 
         // Re-fetch digests to get updated photo data
         let updatedDigests = fetchDigestsForMonth(year: year, month: month, context: context)
+        print("[MonthlyPack] Re-fetched \(updatedDigests.count) digests after reprocessing")
+
+        // Log updated keyword state
+        for digest in updatedDigests {
+            let day = digest.date.map { calendar.component(.day, from: $0) }
+            let keywords: [String]
+            if let kd = digest.keywordsData {
+                keywords = [String].decoded(from: kd)
+            } else {
+                keywords = []
+            }
+            print("[MonthlyPack]   Day \(day ?? -1) keywords after reprocess: \(keywords)")
+        }
 
         // Calculate statistics
         let stats = calculateMonthlyStats(from: updatedDigests)
+        print("[MonthlyPack] Stats: entries=\(stats.daysWithEntries)/\(stats.totalDays), photos=\(stats.totalPhotos), words=\(stats.totalWords), themes=\(stats.topThemes.count), streak=\(stats.longestStreak)")
 
         // Extract daily entry contexts for AI
         let dailyEntries = extractDailyEntryContexts(from: updatedDigests)
+        print("[MonthlyPack] Extracted \(dailyEntries.count) daily entry contexts for AI")
+        for entry in dailyEntries {
+            print("[MonthlyPack]   Day \(entry.dayOfMonth) (\(entry.weekday)): mood=\(entry.mood ?? "nil"), text=\(entry.journalText?.prefix(50) ?? "nil"), keywords=\(entry.keywords.prefix(5)), photos=\(entry.photoDescriptions.count)")
+        }
 
         // Extract narrative and photos using AI (try AI, fallback to keyword matching)
         let (themePhotos, opening, closing) = await selectPhotosWithAI(from: updatedDigests, dailyEntries: dailyEntries, stats: stats, maxTopics: 5)
@@ -45,12 +87,20 @@ class MonthlyPackGenerator {
         if let opening = opening, let closing = closing {
             narrativeSummary = "---OPENING---\n\(opening)\n---CLOSING---\n\(closing)"
             method = "foundationModels"
+            print("[MonthlyPack] Using AI narrative: opening=\(opening.prefix(80))..., closing=\(closing.prefix(80))...")
         } else {
             // Fallback summary
             let (fallbackSummary, _) = await generateSummary(from: updatedDigests, stats: stats, month: month, year: year)
             narrativeSummary = fallbackSummary
             method = "template"
+            print("[MonthlyPack] Using fallback summary (no AI opening/closing)")
         }
+
+        print("[MonthlyPack] Final result: method=\(method), themePhotos=\(themePhotos.count)")
+        for (i, tp) in themePhotos.enumerated() {
+            print("[MonthlyPack]   Section \(i+1): theme='\(tp.theme)', desc=\(tp.description?.prefix(80) ?? "nil")")
+        }
+        print("[MonthlyPack] ========== GENERATION COMPLETE ==========")
 
         // Update Core Data on the context's thread
         return await context.perform {
@@ -395,25 +445,54 @@ class MonthlyPackGenerator {
             }
         }
 
-        for topic in topics {
+        // Log available days and their photo counts
+        let availableDays = dayToDigest.keys.sorted()
+        print("[PhotoMatch] Available days with digests: \(availableDays)")
+        for day in availableDays {
+            if let digest = dayToDigest[day], let pd = digest.photosData {
+                let photos = [PhotoInfo].decoded(from: pd)
+                print("[PhotoMatch]   Day \(day): \(photos.count) photo(s)")
+            } else {
+                print("[PhotoMatch]   Day \(day): no photos")
+            }
+        }
+
+        print("[PhotoMatch] Processing \(topics.count) AI sections...")
+        for (topicIndex, topic) in topics.enumerated() {
+            print("[PhotoMatch] --- Section \(topicIndex + 1): '\(topic.name)' | requested days: \(topic.days) ---")
             var bestMatch: (photo: PhotoInfo, day: Int, score: Double)?
 
             // Look at digests for the days associated with this topic
             for dayNum in topic.days {
                 // Skip days already used by other topics
-                guard !usedDays.contains(dayNum) else { continue }
-                guard let digest = dayToDigest[dayNum] else { continue }
-                guard let photosData = digest.photosData else { continue }
+                if usedDays.contains(dayNum) {
+                    print("[PhotoMatch]   Day \(dayNum): SKIPPED (already used by previous section)")
+                    continue
+                }
+                guard let digest = dayToDigest[dayNum] else {
+                    print("[PhotoMatch]   Day \(dayNum): SKIPPED (no digest found for this day)")
+                    continue
+                }
+                guard let photosData = digest.photosData else {
+                    print("[PhotoMatch]   Day \(dayNum): SKIPPED (digest has no photos)")
+                    continue
+                }
 
                 let photos = [PhotoInfo].decoded(from: photosData)
+                print("[PhotoMatch]   Day \(dayNum): checking \(photos.count) photo(s)...")
 
                 for photo in photos {
-                    guard !usedPhotoIds.contains(photo.id) else { continue }
+                    if usedPhotoIds.contains(photo.id) {
+                        print("[PhotoMatch]     Photo \(photo.id.uuidString.prefix(8)): SKIPPED (already used)")
+                        continue
+                    }
 
                     // Score the photo
                     var score = photo.qualityScore
                     if digest.isStarred { score += 0.3 }
                     if photo.hasFaces { score += 0.2 }
+
+                    print("[PhotoMatch]     Photo \(photo.id.uuidString.prefix(8)): score=\(String(format: "%.2f", score)) (quality=\(String(format: "%.2f", photo.qualityScore)), faces=\(photo.hasFaces), starred=\(digest.isStarred))")
 
                     if bestMatch == nil || score > bestMatch!.score {
                         bestMatch = (photo, dayNum, score)
@@ -432,12 +511,13 @@ class MonthlyPackGenerator {
                 themePhotos.append(themePhoto)
                 usedPhotoIds.insert(match.photo.id)
                 usedDays.insert(match.day)  // Mark day as used
-                print("[ThemePhotos] ✓ Topic: '\(topic.name)' | Day: \(match.day) | Description: \(topic.description)")
+                print("[PhotoMatch] ✓ Section \(topicIndex + 1) matched: '\(topic.name)' -> Day \(match.day), score=\(String(format: "%.2f", match.score))")
             } else {
-                print("[ThemePhotos] ✗ Topic: '\(topic.name)' | Days: \(topic.days) - NO PHOTO FOUND (days may be used)")
+                print("[PhotoMatch] ✗ Section \(topicIndex + 1) DROPPED: '\(topic.name)' | days \(topic.days) -> no usable photo found")
             }
         }
 
+        print("[PhotoMatch] Result: \(themePhotos.count)/\(topics.count) sections got photos, usedDays=\(usedDays.sorted())")
         return themePhotos
     }
 
