@@ -390,7 +390,7 @@ struct StatItem: View {
     }
 }
 
-// MARK: - Story Section (Photo-first card with gradient text overlay)
+// MARK: - Story Section (Text left, photo right)
 
 struct StorySection: View {
     let themePhoto: ThemePhoto
@@ -398,64 +398,50 @@ struct StorySection: View {
     @State private var currentPage = 0
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Paged photo — full width, one at a time
+        HStack(alignment: .top, spacing: 12) {
+            // Text on the left
+            VStack(alignment: .leading, spacing: 6) {
+                if let desc = themePhoto.description, !desc.isEmpty {
+                    Text(desc)
+                        .font(.subheadline)
+                        .lineSpacing(5)
+                        .foregroundColor(.primary.opacity(0.85))
+                }
+
+                if themePhoto.photos.count > 1 {
+                    Text("\(currentPage + 1) / \(themePhoto.photos.count)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Swipeable photo on the right
             TabView(selection: $currentPage) {
                 ForEach(Array(themePhoto.photos.enumerated()), id: \.element.id) { index, photo in
                     if let image = photo.loadImage() {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 320)
+                            .frame(width: 120, height: 150)
                             .clipped()
-                            .contentShape(Rectangle())
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                             .onTapGesture(perform: onPhotoTap)
                             .tag(index)
                     } else {
-                        Rectangle()
+                        RoundedRectangle(cornerRadius: 8)
                             .fill(Color.secondary.opacity(0.15))
-                            .frame(height: 320)
                             .tag(index)
                     }
                 }
             }
-            .tabViewStyle(.page(indexDisplayMode: themePhoto.photos.count > 1 ? .automatic : .never))
-            .frame(height: 320)
-
-            // Gradient overlay with text at bottom
-            if let desc = themePhoto.description, !desc.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Spacer()
-
-                    Text(desc)
-                        .font(.subheadline)
-                        .lineSpacing(4)
-                        .foregroundColor(.white)
-                        .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
-
-                    if themePhoto.photos.count > 1 {
-                        Text("\(currentPage + 1) / \(themePhoto.photos.count)")
-                            .font(.caption2)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 14)
-                .padding(.top, 60)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.6)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(width: 120, height: 150)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }
 
