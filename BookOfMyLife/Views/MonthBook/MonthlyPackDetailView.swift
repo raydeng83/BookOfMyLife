@@ -18,7 +18,7 @@ struct MonthlyPackDetailView: View {
     @State private var showingRegenerateConfirmation = false
     @State private var showingDeleteConfirmation = false
     @State private var showingPhotoViewer = false
-    @State private var selectedPhotoIndex = 0
+    @State private var selectedPhotos: [PhotoInfo] = []
     var onDelete: (() -> Void)?
 
     private var stats: MonthlyStats? {
@@ -210,7 +210,7 @@ struct MonthlyPackDetailView: View {
             Text("This will permanently delete this month book and its summary. Your daily journal entries will not be affected.")
         }
         .fullScreenCover(isPresented: $showingPhotoViewer) {
-            PhotoViewerView(photos: photos, initialIndex: selectedPhotoIndex)
+            VerticalPhotoViewer(photos: selectedPhotos)
         }
         .sheet(isPresented: $showingPDFViewer) {
             if let pdfData = pack.pdfData {
@@ -282,12 +282,11 @@ struct MonthlyPackDetailView: View {
             .padding(.bottom, 4)
 
             // Photos within this group
-            ForEach(Array(group.photos.enumerated()), id: \.element.id) { photoIndex, themePhoto in
-                let globalIndex = themePhotos.firstIndex(where: { $0.id == themePhoto.id }) ?? photoIndex
+            ForEach(group.photos, id: \.id) { themePhoto in
                 StorySection(
                     themePhoto: themePhoto,
                     onPhotoTap: {
-                        selectedPhotoIndex = globalIndex
+                        selectedPhotos = themePhoto.photos
                         showingPhotoViewer = true
                     }
                 )
@@ -395,7 +394,6 @@ struct StatItem: View {
 struct StorySection: View {
     let themePhoto: ThemePhoto
     let onPhotoTap: () -> Void
-    @State private var currentPage = 0
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -409,39 +407,65 @@ struct StorySection: View {
                 }
 
                 if themePhoto.photos.count > 1 {
-                    Text("\(currentPage + 1) / \(themePhoto.photos.count)")
+                    Text("\(themePhoto.photos.count) photos")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Swipeable photo on the right
-            TabView(selection: $currentPage) {
-                ForEach(Array(themePhoto.photos.enumerated()), id: \.element.id) { index, photo in
-                    if let image = photo.loadImage() {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 120, height: 150)
-                            .clipped()
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .onTapGesture(perform: onPhotoTap)
-                            .tag(index)
-                    } else {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.secondary.opacity(0.15))
-                            .tag(index)
-                    }
-                }
+            // Static first photo on the right, tap to see all
+            if let image = themePhoto.photo.loadImage() {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 120, height: 150)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                    .onTapGesture(perform: onPhotoTap)
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.secondary.opacity(0.15))
+                    .frame(width: 120, height: 150)
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .frame(width: 120, height: 150)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Vertical Photo Viewer (full-screen, all photos stacked)
+
+struct VerticalPhotoViewer: View {
+    let photos: [PhotoInfo]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+
+            ScrollView(.vertical, showsIndicators: true) {
+                LazyVStack(spacing: 2) {
+                    ForEach(photos) { photo in
+                        if let image = photo.loadImage() {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                }
+            }
+
+            Button(action: { dismiss() }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.title)
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding()
+            }
+        }
+        .statusBarHidden()
     }
 }
 
