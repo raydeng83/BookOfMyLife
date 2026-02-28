@@ -385,6 +385,7 @@ struct StatItem: View {
 struct StorySection: View {
     let themePhoto: ThemePhoto
     let onPhotoTap: () -> Void
+    @State private var currentPage = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -397,26 +398,36 @@ struct StorySection: View {
                     .padding(.horizontal)
             }
 
-            // Scrollable photos
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(Array(themePhoto.photos.enumerated()), id: \.element.id) { index, photo in
-                        if let image = photo.loadImage() {
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 160, height: 200)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .shadow(color: .black.opacity(0.12), radius: 6, x: 0, y: 3)
-                                .onTapGesture(perform: onPhotoTap)
-                        } else {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.secondary.opacity(0.15))
-                                .frame(width: 160, height: 200)
-                        }
+            // Paged photo viewer — one photo at a time, swipe to change
+            TabView(selection: $currentPage) {
+                ForEach(Array(themePhoto.photos.enumerated()), id: \.element.id) { index, photo in
+                    if let image = photo.loadImage() {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(height: 240)
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .padding(.horizontal)
+                            .onTapGesture(perform: onPhotoTap)
+                            .tag(index)
+                    } else {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.secondary.opacity(0.15))
+                            .frame(height: 240)
+                            .padding(.horizontal)
+                            .tag(index)
                     }
                 }
-                .padding(.horizontal)
+            }
+            .tabViewStyle(.page(indexDisplayMode: themePhoto.photos.count > 1 ? .automatic : .never))
+            .frame(height: 260)
+
+            // Photo counter for multi-photo entries
+            if themePhoto.photos.count > 1 {
+                Text("\(currentPage + 1) / \(themePhoto.photos.count)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
         .padding(.vertical, 8)
